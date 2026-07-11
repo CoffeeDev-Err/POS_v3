@@ -11,6 +11,15 @@ use Illuminate\Support\Str;
 
 class PosApiController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | Authentication
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Issue a plain API token and keep only its hash in storage.
+     */
     public function login(Request $request)
     {
         $username = $this->normalizeUsername($request->input('username'));
@@ -69,6 +78,12 @@ class PosApiController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Catalog: Products and Categories
+    |--------------------------------------------------------------------------
+    */
 
     public function products(Request $request)
     {
@@ -164,6 +179,12 @@ class PosApiController extends Controller
 
         return response()->noContent();
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | User Management
+    |--------------------------------------------------------------------------
+    */
 
     public function users(Request $request)
     {
@@ -275,6 +296,12 @@ class PosApiController extends Controller
         return response()->noContent();
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | POS Transactions and Inventory
+    |--------------------------------------------------------------------------
+    */
+
     public function transactions(Request $request)
     {
         $this->requireUser($request);
@@ -286,6 +313,8 @@ class PosApiController extends Controller
     {
         $actor = $this->requireUser($request);
         $payload = $request->all();
+
+        // Sales write multiple tables at once, so we keep the inventory mutation atomic.
         $result = DB::transaction(function () use ($payload, $actor) {
             [$date, $time] = $this->dateTimeParts();
             $subtotal = collect($payload['items'] ?? [])->sum(fn ($item) => $this->number($item['total'] ?? 0));
@@ -323,21 +352,14 @@ class PosApiController extends Controller
 
             $updatedProducts = [];
             foreach (($payload['items'] ?? []) as $item) {
-                $product = DB::table('products')->find((string) ($item['productId'] ?? ''));
-                if (!$product) {
-                    continue;
-                }
-
-                $productData = $this->decode($product->data);
                 $conversionRate = $this->number($item['conversionRate'] ?? 1);
-                $newStock = max(0, $this->number($productData['stock'] ?? $product->stock) - ($this->number($item['qty'] ?? 0) * $conversionRate));
-                $productData['stock'] = $newStock;
-                DB::table('products')->where('id', $product->id)->update([
-                    'stock' => $newStock,
-                    'data' => $this->json($productData),
-                    'updated_at' => now(),
-                ]);
-                $updatedProducts[] = $this->productResource(DB::table('products')->find($product->id));
+                $updatedProduct = $this->adjustProductStock(
+                    (string) ($item['productId'] ?? ''),
+                    -1 * ($this->number($item['qty'] ?? 0) * $conversionRate)
+                );
+                if ($updatedProduct) {
+                    $updatedProducts[] = $updatedProduct;
+                }
             }
 
             $credit = null;
@@ -378,6 +400,7 @@ class PosApiController extends Controller
     {
         $this->requireUser($request);
         $payload = $request->all();
+
         $result = DB::transaction(function () use ($payload) {
             $id = DB::table('stock_movements')->insertGetId([
                 'product_id' => $payload['productId'] ?? null,
@@ -389,19 +412,10 @@ class PosApiController extends Controller
                 'updated_at' => now(),
             ]);
 
-            $updatedProduct = null;
-            $product = DB::table('products')->find((string) ($payload['productId'] ?? ''));
-            if ($product) {
-                $productData = $this->decode($product->data);
-                $newStock = $this->number($productData['stock'] ?? $product->stock) + $this->number($payload['qty'] ?? 0);
-                $productData['stock'] = $newStock;
-                DB::table('products')->where('id', $product->id)->update([
-                    'stock' => $newStock,
-                    'data' => $this->json($productData),
-                    'updated_at' => now(),
-                ]);
-                $updatedProduct = $this->productResource(DB::table('products')->find($product->id));
-            }
+            $updatedProduct = $this->adjustProductStock(
+                (string) ($payload['productId'] ?? ''),
+                $this->number($payload['qty'] ?? 0)
+            );
 
             return [
                 'movement' => $this->movementResource(DB::table('stock_movements')->find($id)),
@@ -412,6 +426,12 @@ class PosApiController extends Controller
 
         return response()->json($result, 201);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Store Settings, Expenses, and Audit Trail
+    |--------------------------------------------------------------------------
+    */
 
     public function settings(Request $request)
     {
@@ -494,6 +514,12 @@ class PosApiController extends Controller
         return response()->json(DB::table('audit_logs')->find($id), 201);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Orders and Credit Ledger
+    |--------------------------------------------------------------------------
+    */
+
     public function orders(Request $request)
     {
         $this->requireUser($request);
@@ -574,6 +600,7 @@ class PosApiController extends Controller
             'updated_at' => now(),
         ]);
 
+        // Only persist an edit log for material order changes, not for passive lock refreshes.
         if (array_key_exists('items', $payload) || array_key_exists('subtotal', $payload)) {
             DB::table('order_edit_logs')->insert([
                 'order_id' => $id,
@@ -612,6 +639,7 @@ class PosApiController extends Controller
         $data = $this->decode($row->data);
         $lock = $data['editLock'] ?? null;
         $nowMs = (int) floor(microtime(true) * 1000);
+        // Guard against simultaneous edits from two operators on the same order.
         $lockedByOther = $lock
             && (int) ($lock['expiresAtMs'] ?? 0) > $nowMs
             && !empty($lock['byId'])
@@ -755,21 +783,14 @@ class PosApiController extends Controller
 
             $updatedProducts = [];
             foreach (($data['items'] ?? []) as $item) {
-                $product = DB::table('products')->find((string) ($item['productId'] ?? ''));
-                if (!$product) {
-                    continue;
-                }
-
-                $productData = $this->decode($product->data);
                 $baseQty = $this->number($item['qty'] ?? 0) * $this->number($item['conversionRate'] ?? 1);
-                $newStock = $this->number($productData['stock'] ?? $product->stock) + $baseQty;
-                $productData['stock'] = $newStock;
-                DB::table('products')->where('id', $product->id)->update([
-                    'stock' => $newStock,
-                    'data' => $this->json($productData),
-                    'updated_at' => now(),
-                ]);
-                $updatedProducts[] = ['id' => (string) $product->id, 'stock' => $newStock];
+                $updatedProduct = $this->adjustProductStock((string) ($item['productId'] ?? ''), $baseQty);
+                if ($updatedProduct) {
+                    $updatedProducts[] = [
+                        'id' => $updatedProduct['id'],
+                        'stock' => $updatedProduct['stock'],
+                    ];
+                }
             }
 
             return [
@@ -784,6 +805,12 @@ class PosApiController extends Controller
 
         return response()->json($result);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maintenance Utilities
+    |--------------------------------------------------------------------------
+    */
 
     public function migrateOrNumbers(Request $request)
     {
@@ -822,6 +849,7 @@ class PosApiController extends Controller
 
     private function storeCredit(array $payload): array
     {
+        // Credit entries mirror the transaction summary and then evolve as payments are posted.
         $date = now()->format('Y-m-d');
         $data = array_merge($payload, [
             'amountPaid' => 0,
@@ -866,6 +894,12 @@ class PosApiController extends Controller
 
     private function requireUser(Request $request): object
     {
+        // Prefer the middleware-attached user to avoid repeated token lookups in the same request.
+        $user = $request->attributes->get('authUser');
+        if ($user) {
+            return $user;
+        }
+
         $token = $request->bearerToken() ?: $request->header('X-Auth-Token');
         if (!$token) {
             abort(401, 'Not authenticated');
@@ -877,6 +911,34 @@ class PosApiController extends Controller
         }
 
         return $user;
+    }
+
+    /**
+     * Apply a signed stock delta and return the fresh product resource.
+     */
+    private function adjustProductStock(string $productId, float $delta): ?array
+    {
+        if ($productId === '') {
+            return null;
+        }
+
+        $product = DB::table('products')->find($productId);
+        if (!$product) {
+            return null;
+        }
+
+        $productData = $this->decode($product->data);
+        $currentStock = $this->number($productData['stock'] ?? $product->stock);
+        $newStock = max(0, $currentStock + $delta);
+        $productData['stock'] = $newStock;
+
+        DB::table('products')->where('id', $product->id)->update([
+            'stock' => $newStock,
+            'data' => $this->json($productData),
+            'updated_at' => now(),
+        ]);
+
+        return $this->productResource(DB::table('products')->find($product->id));
     }
 
     private function userResource(?object $row): ?array
@@ -1042,6 +1104,7 @@ class PosApiController extends Controller
 
     private function decode(mixed $value): array
     {
+        // Several tables keep their flexible fields as JSON blobs, so we normalize all reads here.
         if (is_array($value)) {
             return $value;
         }

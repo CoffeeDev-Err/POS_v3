@@ -3,6 +3,7 @@ const SkeletonBox = ({ className, style }) => (
 );
 
 export default function LoadingSkeleton({ variant = 'page' }) {
+  // Each variant mirrors the rough layout of its target screen to reduce perceived jank.
   if (variant === 'banner') {
     return (
       <div className="loading-skeleton loading-skeleton-banner" aria-hidden="true">

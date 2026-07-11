@@ -15,10 +15,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $now = now();
+
+        // Keep base records deterministic so a fresh environment can log in immediately.
         $this->seedInitialAdmin($now);
         $this->seedSettings($now);
         $this->seedCounter($now);
 
+        // Demo data stays opt-in to avoid polluting production or staging databases.
         if (filter_var(env('POS_SEED_DEMO_DATA', false), FILTER_VALIDATE_BOOLEAN)) {
             $this->seedDemoCatalog($now);
         }
@@ -33,6 +36,7 @@ class DatabaseSeeder extends Seeder
             throw new RuntimeException('Set POS_ADMIN_PASSWORD in backend/.env before running the database seeder.');
         }
 
+        // updateOrInsert lets the seeder stay repeatable across local refreshes and deployments.
         DB::table('users')->updateOrInsert(
             ['username_normalized' => $username],
             [
@@ -99,6 +103,7 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($products as $product) {
+            // The structured columns drive fast filters, while the JSON blob keeps UI-friendly fields together.
             DB::table('products')->updateOrInsert(
                 ['name' => $product['name']],
                 [

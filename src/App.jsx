@@ -79,6 +79,7 @@ export default function App() {
     const token = getAuthToken();
     if (!token) return;
 
+    // Rehydrate the last authenticated session before the UI renders protected pages.
     const bootstrap = async () => {
       setLoading(true);
       setLoadError('');
@@ -106,6 +107,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    // Surface both custom app errors and truly unhandled browser/runtime failures.
     const onGlobalError = (event) => {
       setGlobalError(event.detail || normalizeError(event.error));
     };
@@ -214,6 +216,7 @@ export default function App() {
   };
 
   const renderPage = () => {
+    // Keep the page switch in one place so each screen gets the same shared app state.
     const props = {
       products,
       transactions,
