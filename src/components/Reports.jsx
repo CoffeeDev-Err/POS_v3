@@ -110,7 +110,7 @@ export default function Reports({ transactions, products, expenses, currentUser,
       ? ` | Product: ${products.find(p => p.id === productFilter)?.name || productFilter}`
       : categoryFilter ? ` | Category: ${categoryFilter}` : '';
     const html = `
-      <h1>CARREN'S STORE — Sales Report</h1>
+      <h1>8ShineRice — Sales Report</h1>
       <p>Period: <strong>${fromDate}</strong> to <strong>${toDate}</strong>${filterLabel} | Generated: ${new Date().toLocaleString()}</p>
       <div style="display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;">
         <div class="summary-box"><div style="font-size:20pt;font-weight:bold;">${peso(dailySales)}</div><div>Daily Sales</div></div>

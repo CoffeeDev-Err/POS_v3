@@ -47,5 +47,8 @@ backend/auth.json
 # Spec / planning files
 pos-changes-prompt.md
 
+# graphify knowledge-graph output
+graphify-out/
+
 # Local notes
 pass.txt

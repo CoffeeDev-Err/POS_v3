@@ -34,7 +34,7 @@ import {
 } from '../utils/api';
 
 const DEFAULT_SETTINGS = {
-  storeName: "CARREN'S STORE",
+  storeName: '8ShineRice',
   address: 'Urdaneta, Ilocos',
   phone: '09XX-XXX-XXXX',
   receiptFooter: 'Salamat sa inyong pagbili! Please come again :)',

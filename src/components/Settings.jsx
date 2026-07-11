@@ -4,7 +4,7 @@ import { getErrorMessage } from '../utils/errors';
 
 export default function Settings({ settings, onSaveSettings, currentUser }) {
   const [store, setStore] = useState({
-    storeName: settings?.storeName || "CARREN'S STORE",
+    storeName: settings?.storeName || '8ShineRice',
     address: settings?.address || 'Urdaneta, Ilocos',
     phone: settings?.phone || '09XX-XXX-XXXX',
     receiptFooter: settings?.receiptFooter || 'Salamat sa inyong pagbili! Please come again :)',

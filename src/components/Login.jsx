@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import '../styles/login.css';
 import { getErrorMessage } from '../utils/errors';
+import logo from '../assets/logo.jpg';
 
 export default function Login({ onLogin, loading, error, theme, onToggleTheme }) {
   const [username, setUsername] = useState('');
@@ -73,9 +74,9 @@ export default function Login({ onLogin, loading, error, theme, onToggleTheme })
         {/* Logo */}
         <div className="text-center mb-4">
           <div className="store-logo mb-2">
-            <i className="bi bi-shop-window"></i>
+            <img src={logo} alt="8ShineRice logo" />
           </div>
-          <h1 className="store-name">CARREN'S STORE</h1>
+          <h1 className="store-name">8ShineRice</h1>
           <p className="store-sub">Point of Sale System</p>
         </div>
 

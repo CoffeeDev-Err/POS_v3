@@ -59,7 +59,7 @@ class DatabaseSeeder extends Seeder
             ['key' => 'global'],
             [
                 'value' => json_encode([
-                    'storeName' => env('POS_STORE_NAME', 'POS Store'),
+                    'storeName' => env('POS_STORE_NAME', '8ShineRice'),
                     'address' => env('POS_STORE_ADDRESS', ''),
                     'phone' => env('POS_STORE_PHONE', ''),
                     'receiptFooter' => env('POS_RECEIPT_FOOTER', 'Thank you for your purchase.'),

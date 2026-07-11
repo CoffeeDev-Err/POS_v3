@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import logo from '../assets/logo.jpg';
 
 const ROLE_LABELS = { superadmin: 'Super Admin', admin: 'Admin', cashier: 'Cashier' };
 const ROLE_COLORS = { superadmin: '#dc3545', admin: '#fd7e14', cashier: '#198754' };
@@ -63,8 +64,8 @@ export default function Layout({ children, currentUser, currentPage, setCurrentP
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <i className="bi bi-shop-window me-2"></i>
-          <span className="sidebar-brand">CARREN'S STORE</span>
+          <img src={logo} alt="8ShineRice logo" className="sidebar-logo me-2" />
+          <span className="sidebar-brand">8ShineRice</span>
         </div>
 
         <div className="sidebar-user">
