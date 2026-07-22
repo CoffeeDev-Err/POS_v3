@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:hostinger": "npm run build && node scripts/prepare-hostinger.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

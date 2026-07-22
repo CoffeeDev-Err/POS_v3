@@ -1,87 +1,123 @@
 # Deployment Guide
 
-This repo is prepared for a split deployment:
+This repo now supports a simple Hostinger shared-hosting deployment on a single domain:
 
-- Frontend: `Vercel`
-- Backend API: `Render`
-- Database: managed `MySQL`
+- Frontend: `https://8shinerice.com`
+- Laravel API: `https://8shinerice.com/api`
+- Database: Hostinger MySQL
 
-As of July 3, 2026, this is the cleanest free-or-cheap path for the current stack.
+As of July 22, 2026, this is the recommended deployment path for this project.
 
-## 1. Backend on Render
+## 1. Build the Hostinger upload bundle
 
-The repo now includes [render.yaml](render.yaml), [backend/Dockerfile](backend/Dockerfile), and [backend/start.sh](backend/start.sh).
+From the repo root, create the production frontend build and the upload-ready folder structure:
 
-Render setup:
+```bash
+npm install
+npm run build:hostinger
+```
 
-1. In Render, create a new Blueprint deployment from the GitHub repo.
-2. Render will detect `render.yaml` and create the `pos-v3-api` web service.
-3. Set the missing environment variables shown in `sync: false`.
+This generates:
 
-Use [backend/.env.production.example](backend/.env.production.example) as the source of truth.
+```text
+.deploy/hostinger/
+  public_html/
+    index.html
+    assets/
+    api/
+      index.php
+      .htaccess
+  laravel-pos/
+    app/
+    bootstrap/
+    config/
+    database/
+    public/
+    resources/
+    routes/
+    storage/
+    artisan
+```
 
-Required backend values:
+The script already rewrites `public_html/api/index.php` so it points to the uploaded Laravel app folder outside the web root.
 
-- `APP_URL=https://your-render-service.onrender.com`
-- `FRONTEND_URL=https://your-vercel-project.vercel.app`
-- `CORS_ALLOWED_ORIGINS=https://your-vercel-project.vercel.app`
-- `DB_CONNECTION=mysql`
-- `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`
-- `POS_ADMIN_NAME`, `POS_ADMIN_EMAIL`, `POS_ADMIN_PASSWORD`
-- `POS_STORE_NAME`
+## 2. Frontend production environment
 
-Notes:
+Create a local `.env.production` file in the repo root using:
 
-- The startup script runs `php artisan migrate --force` on boot.
-- `SESSION_DRIVER=file`, `CACHE_STORE=file`, and `QUEUE_CONNECTION=sync` are used for simpler hosting on free tiers.
-- If your MySQL provider requires SSL, set `MYSQL_ATTR_SSL_CA` to the CA certificate path provided by your host.
+```env
+VITE_API_BASE_URL=https://8shinerice.com/api
+```
 
-Health check:
+The checked-in [.env.production.example](.env.production.example) already matches the one-domain Hostinger setup.
 
-- Render health check path is `/up`
+## 3. Backend production environment
 
-## 2. Frontend on Vercel
+Use [backend/.env.hostinger.example](backend/.env.hostinger.example) as the starting point for your real backend `.env`.
 
-The existing [vercel.json](vercel.json) is ready for SPA routing.
+Important values:
 
-Vercel setup:
+- `APP_URL=https://8shinerice.com/api`
+- `FRONTEND_URL=https://8shinerice.com`
+- `CORS_ALLOWED_ORIGINS=https://8shinerice.com,https://www.8shinerice.com`
+- `API_ROUTE_PREFIX=` (leave blank because the app already lives under `/api`)
+- `DB_HOST=localhost`
+- `DB_PORT=3306`
+- `DB_DATABASE=u889675904_PosDb`
+- `DB_USERNAME=u889675904_posuser`
+- `DB_PASSWORD=...`
+- `POS_ADMIN_PASSWORD=...`
 
-1. Import the same GitHub repo into Vercel.
-2. Set the project root to the repo root.
-3. Build command: `npm run build`
-4. Output directory: `dist`
+## 4. Upload to Hostinger
 
-Set this frontend environment variable in Vercel:
+Upload the generated folders from `.deploy/hostinger` as follows:
 
-- `VITE_API_BASE_URL=https://your-render-service.onrender.com/api`
+1. Upload everything inside `.deploy/hostinger/public_html/` to your domain's `public_html/`
+2. Upload `.deploy/hostinger/laravel-pos/` to your hosting home directory beside `public_html`
 
-Reference value: [.env.production.example](.env.production.example)
+Expected server layout:
 
-## 3. Database
+```text
+~/domains/8shinerice.com/public_html
+~/laravel-pos
+```
 
-The backend is configured for MySQL already, so you do not need to rewrite queries.
+Only the Laravel `api/` public files should be web-accessible. The rest of the backend stays outside `public_html`.
 
-Recommended:
+## 5. Install backend dependencies over SSH
 
-- Aiven free MySQL for demo/testing
-- any paid MySQL host for real production use
+After uploading, connect with SSH and run:
 
-If your provider gives a single connection URL, Laravel also supports `DB_URL`, but the current sample uses the standard `DB_HOST` style variables because they are easier to audit.
+```bash
+cd ~/laravel-pos
+composer install --no-dev --optimize-autoloader
+php artisan key:generate
+php artisan migrate --force --seed
+php artisan config:cache
+php artisan route:cache
+```
 
-## 4. After first deploy
+If you update the backend `.env`, clear and rebuild the config cache:
+
+```bash
+php artisan config:clear
+php artisan config:cache
+```
+
+## 6. Test the deployment
 
 Check these URLs:
 
-1. `https://your-render-service.onrender.com/up`
-2. `https://your-render-service.onrender.com/api/products`
-3. `https://your-vercel-project.vercel.app`
+1. `https://8shinerice.com/api/up`
+2. `https://8shinerice.com`
 
-Then log in with the admin user created from the `POS_ADMIN_*` variables.
+Then log in with:
 
-## Free tier caveat
+- username: `owner`
+- password: the value from `POS_ADMIN_PASSWORD`
 
-Free hosting is okay for demo, portfolio, and testing. It is not ideal for an actual cashier/store workflow because:
+## Notes
 
-- Render free web services sleep after inactivity and have cold starts
-- free databases often have size or time limits
-- Bluetooth printing still depends on browser/device support and secure context
+- Bluetooth printing still depends on browser/device support and HTTPS.
+- This repo keeps the backend and frontend separate in source, but Hostinger upload is prepared as a one-domain package.
+- The generated `.deploy/` folder is ignored by git and safe to regenerate.
