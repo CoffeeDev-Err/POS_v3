@@ -57,10 +57,17 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const message = data?.message || data?.error || `Request failed with status ${response.status}`;
     const normalized = normalizeError(
-      Object.assign(new Error(message), { status: response.status, errors: data?.errors }),
+      Object.assign(new Error(message), {
+        status: response.status,
+        errors: data?.errors,
+        retryAfterSeconds: data?.retryAfterSeconds,
+      }),
       { context: 'api' }
     );
-    throw Object.assign(new Error(normalized.message), normalized, { errors: data?.errors });
+    throw Object.assign(new Error(normalized.message), normalized, {
+      errors: data?.errors,
+      retryAfterSeconds: data?.retryAfterSeconds,
+    });
   }
 
   return data;

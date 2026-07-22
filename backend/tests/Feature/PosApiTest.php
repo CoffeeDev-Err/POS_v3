@@ -73,6 +73,54 @@ class PosApiTest extends TestCase
             ->assertJsonPath('user.role', 'superadmin');
     }
 
+    public function test_login_returns_specific_messages_for_missing_and_deactivated_accounts(): void
+    {
+        $this->createAdmin();
+
+        DB::table('users')->insert([
+            'name' => 'Disabled Admin',
+            'username' => 'admin',
+            'username_normalized' => 'admin',
+            'email' => 'admin@example.test',
+            'role' => 'admin',
+            'active' => false,
+            'password' => Hash::make('admin123'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson('/api/login', [
+            'username' => 'missing-user',
+            'password' => 'whatever123',
+        ])->assertStatus(422)
+            ->assertJsonPath('message', 'No account was found for that username.');
+
+        $this->postJson('/api/login', [
+            'username' => 'admin',
+            'password' => 'admin123',
+        ])->assertStatus(403)
+            ->assertJsonPath('message', 'This account has been deactivated. Contact your administrator.');
+    }
+
+    public function test_login_is_temporarily_throttled_after_five_failed_attempts(): void
+    {
+        $this->createAdmin();
+
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $this->postJson('/api/login', [
+                'username' => 'owner',
+                'password' => 'wrong-password',
+            ])->assertUnauthorized();
+        }
+
+        $this->postJson('/api/login', [
+            'username' => 'owner',
+            'password' => 'wrong-password',
+        ])->assertStatus(429)
+            ->assertJsonPath('message', 'Too many failed sign-in attempts. Please wait before trying again.')
+            ->assertJsonStructure(['retryAfterSeconds']);
+    }
+
     public function test_user_account_crud_and_password_change_work(): void
     {
         $token = $this->bearerToken();

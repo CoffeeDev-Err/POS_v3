@@ -3,14 +3,18 @@ import '../styles/login.css';
 import { getErrorMessage } from '../utils/errors';
 import logo from '../assets/logo.jpg';
 
+const getStoredThrottleSeconds = () => {
+  const until = Number(sessionStorage.getItem('pos_login_throttled_until') || 0);
+  if (!until) return 0;
+  return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+};
+
 export default function Login({ onLogin, loading, error, theme, onToggleTheme }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [formError, setFormError] = useState(() =>
-    sessionStorage.getItem('pos_login_throttled') === 'warned' ? 'still-restricted' : ''
-  );
+  const [formError, setFormError] = useState(() => (getStoredThrottleSeconds() > 0 ? 'too-many-requests' : ''));
   const [showPass, setShowPass] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [countdown, setCountdown] = useState(() => getStoredThrottleSeconds());
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -18,6 +22,7 @@ export default function Login({ onLogin, loading, error, theme, onToggleTheme })
       setCountdown(prev => {
         if (prev <= 1) {
           clearInterval(intervalId);
+          sessionStorage.removeItem('pos_login_throttled_until');
           setFormError('retry-now');
           return 0;
         }
@@ -33,26 +38,25 @@ export default function Login({ onLogin, loading, error, theme, onToggleTheme })
     setFormError('loading');
     try {
       await onLogin(username, password);
-      sessionStorage.removeItem('pos_login_throttled');
+      sessionStorage.removeItem('pos_login_throttled_until');
     } catch (err) {
       const code = err.code || '';
       const msg = err.message || '';
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
         setFormError('Incorrect username or password. Please try again.');
-      } else if (code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
-        if (sessionStorage.getItem('pos_login_throttled') === 'warned') {
-          // Already waited once; keep the user from retry-looping during temporary lockout.
-          setFormError('still-restricted');
-        } else {
-          sessionStorage.setItem('pos_login_throttled', 'warned');
-          setCountdown(60);
-          setFormError('too-many-requests');
-        }
+      } else if (err.status === 429 || code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
+        const retryAfterSeconds = Math.max(1, Number(err.retryAfterSeconds || 60));
+        sessionStorage.setItem('pos_login_throttled_until', String(Date.now() + (retryAfterSeconds * 1000)));
+        setCountdown(retryAfterSeconds);
+        setFormError('too-many-requests');
       } else if (code === 'auth/user-disabled') {
         setFormError('This account has been disabled. Contact your administrator.');
       } else if (msg) {
         // Show our own custom error messages (deactivated account, etc.)
-        setFormError(getErrorMessage(err, { fallback: 'Unable to sign in. Please check your credentials and try again.' }));
+        setFormError(getErrorMessage(err, {
+          context: 'login',
+          fallback: 'Unable to sign in. Please check your credentials and try again.',
+        }));
       } else {
         setFormError('Unable to sign in. Please check your credentials and try again.');
       }
@@ -98,14 +102,6 @@ export default function Login({ onLogin, loading, error, theme, onToggleTheme })
               <div className="alert alert-info d-flex align-items-center gap-2 py-2" role="alert">
                 <i className="bi bi-check-circle-fill"></i>
                 <small>You may now try signing in again.</small>
-              </div>
-            ) : formError === 'still-restricted' ? (
-              <div className="alert alert-warning d-flex align-items-start gap-2 py-2" role="alert">
-                <i className="bi bi-shield-exclamation flex-shrink-0 mt-1"></i>
-                <div>
-                  <div className="fw-semibold" style={{ fontSize: '0.85rem' }}>Access is still temporarily restricted.</div>
-                  <div style={{ fontSize: '0.8rem' }}>Too many failed attempts were recorded. Please wait a few minutes and try again.</div>
-                </div>
               </div>
             ) : (
               <div className="alert alert-danger d-flex align-items-center gap-2 py-2" role="alert">

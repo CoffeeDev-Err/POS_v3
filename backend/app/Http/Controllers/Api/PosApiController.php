@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class PosApiController extends Controller
@@ -24,9 +25,17 @@ class PosApiController extends Controller
     {
         $username = $this->normalizeUsername($request->input('username'));
         $password = (string) $request->input('password', '');
+        $throttleKey = $this->loginThrottleKey($request, $username);
 
         if ($username === '') {
             return response()->json(['message' => 'Please enter your username.'], 422);
+        }
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return response()->json([
+                'message' => 'Too many failed sign-in attempts. Please wait before trying again.',
+                'retryAfterSeconds' => RateLimiter::availableIn($throttleKey),
+            ], 429);
         }
 
         $user = DB::table('users')
@@ -34,9 +43,37 @@ class PosApiController extends Controller
             ->orWhere('username', $username)
             ->first();
 
-        if (!$user || !$user->active || !Hash::check($password, $user->password)) {
+        if (!$user) {
+            RateLimiter::hit($throttleKey, 60);
+
+            if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+                return response()->json([
+                    'message' => 'Too many failed sign-in attempts. Please wait before trying again.',
+                    'retryAfterSeconds' => RateLimiter::availableIn($throttleKey),
+                ], 429);
+            }
+
+            return response()->json(['message' => 'No account was found for that username.'], 422);
+        }
+
+        if (!$user->active) {
+            return response()->json(['message' => 'This account has been deactivated. Contact your administrator.'], 403);
+        }
+
+        if (!Hash::check($password, $user->password)) {
+            RateLimiter::hit($throttleKey, 60);
+
+            if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+                return response()->json([
+                    'message' => 'Too many failed sign-in attempts. Please wait before trying again.',
+                    'retryAfterSeconds' => RateLimiter::availableIn($throttleKey),
+                ], 429);
+            }
+
             return response()->json(['message' => 'Invalid username or password. Please check your credentials and try again.'], 401);
         }
+
+        RateLimiter::clear($throttleKey);
 
         $token = Str::random(80);
         DB::table('users')->where('id', $user->id)->update([
@@ -1093,6 +1130,11 @@ class PosApiController extends Controller
     private function normalizeUsername(mixed $value): string
     {
         return strtolower(trim((string) $value));
+    }
+
+    private function loginThrottleKey(Request $request, string $username): string
+    {
+        return 'login:'.sha1($username.'|'.$request->ip());
     }
 
     private function syntheticEmail(string $username): string

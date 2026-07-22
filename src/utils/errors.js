@@ -15,7 +15,21 @@ export function normalizeError(error, options = {}) {
   const code = error?.code || error?.name || '';
   const rawMessage = String(error?.message || error || '').trim();
 
-  if (status === 401) {
+  if (status === 401) { 
+    if (
+      context === 'login'
+      || /invalid username or password|credentials/i.test(rawMessage)
+    ) {
+      return {
+        title: 'Sign in failed',
+        message: 'Incorrect username or password. Please try again.',
+        severity: 'warning',
+        status,
+        code,
+        original: error,
+      };
+    }
+
     return {
       title: 'Session expired',
       message: 'Please sign in again to continue.',
@@ -27,9 +41,31 @@ export function normalizeError(error, options = {}) {
   }
 
   if (status === 403) {
+    if (context === 'login' && rawMessage) {
+      return {
+        title: 'Sign in failed',
+        message: rawMessage,
+        severity: 'warning',
+        status,
+        code,
+        original: error,
+      };
+    }
+
     return {
       title: 'Access denied',
       message: 'Your account does not have permission to do that action.',
+      severity: 'warning',
+      status,
+      code,
+      original: error,
+    };
+  }
+
+  if (status === 429) {
+    return {
+      title: 'Too many attempts',
+      message: rawMessage || 'Too many requests. Please wait a moment and try again.',
       severity: 'warning',
       status,
       code,

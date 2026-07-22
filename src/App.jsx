@@ -152,7 +152,10 @@ export default function App() {
         // Best effort only; login should not fail when audit write fails.
       }
     } catch (err) {
-      setLoadError(getErrorMessage(err, { fallback: 'Login failed. Please check your credentials and try again.' }));
+      setLoadError(getErrorMessage(err, {
+        context: 'login',
+        fallback: 'Login failed. Please check your credentials and try again.',
+      }));
       throw err;
     } finally {
       setLoading(false);
