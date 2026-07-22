@@ -79,7 +79,7 @@ Expected server layout:
 
 ```text
 ~/domains/8shinerice.com/public_html
-~/laravel-pos
+~/domains/8shinerice.com/laravel-pos
 ```
 
 Only the Laravel `api/` public files should be web-accessible. The rest of the backend stays outside `public_html`.
@@ -89,10 +89,14 @@ Only the Laravel `api/` public files should be web-accessible. The rest of the b
 After uploading, connect with SSH and run:
 
 ```bash
-cd ~/laravel-pos
-composer install --no-dev --optimize-autoloader
+cd ~/domains/8shinerice.com/laravel-pos
+composer install --no-dev --optimize-autoloader --no-scripts
+php artisan package:discover
+mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing
+chmod -R 775 storage bootstrap/cache
 php artisan key:generate
 php artisan migrate --force --seed
+php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache
 ```
@@ -115,6 +119,35 @@ Then log in with:
 
 - username: `owner`
 - password: the value from `POS_ADMIN_PASSWORD`
+
+## 7. GitHub auto deploy
+
+This repo also supports automatic deployment from `main` using GitHub Actions.
+
+Create these repository secrets in GitHub:
+
+- `HOSTINGER_HOST`
+- `HOSTINGER_PORT`
+- `HOSTINGER_USERNAME`
+- `HOSTINGER_PASSWORD`
+- `HOSTINGER_PUBLIC_HTML_PATH`
+- `HOSTINGER_APP_PATH`
+
+For the current 8ShineRice setup, the path values are:
+
+```text
+HOSTINGER_PUBLIC_HTML_PATH=/home/u889675904/domains/8shinerice.com/public_html
+HOSTINGER_APP_PATH=/home/u889675904/domains/8shinerice.com/laravel-pos
+```
+
+After the secrets are added, every push to `main` will:
+
+1. build the Hostinger bundle
+2. sync `public_html`
+3. sync the Laravel app without overwriting `.env`
+4. run `composer install`, `php artisan migrate --force`, and the cache refresh commands over SSH
+
+The workflow file lives at [.github/workflows/deploy-hostinger.yml](.github/workflows/deploy-hostinger.yml).
 
 ## Notes
 

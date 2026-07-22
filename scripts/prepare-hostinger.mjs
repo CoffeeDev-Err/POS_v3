@@ -93,13 +93,17 @@ Upload targets:
 
 Expected server layout:
 - ~/domains/8shinerice.com/public_html
-- ~/laravel-pos
+- ~/domains/8shinerice.com/laravel-pos
 
 After upload, run in SSH:
-  cd ~/laravel-pos
-  composer install --no-dev --optimize-autoloader
+  cd ~/domains/8shinerice.com/laravel-pos
+  composer install --no-dev --optimize-autoloader --no-scripts
+  php artisan package:discover
+  mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing
+  chmod -R 775 storage bootstrap/cache
   php artisan key:generate
   php artisan migrate --force --seed
+  php artisan optimize:clear
   php artisan config:cache
   php artisan route:cache
 

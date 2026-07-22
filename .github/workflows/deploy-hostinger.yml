@@ -1,0 +1,92 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+      HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
+      HOSTINGER_USERNAME: ${{ secrets.HOSTINGER_USERNAME }}
+      HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+      HOSTINGER_PUBLIC_HTML_PATH: ${{ secrets.HOSTINGER_PUBLIC_HTML_PATH }}
+      HOSTINGER_APP_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
+    steps:
+      - name: Check required secrets
+        run: |
+          missing=0
+          for name in HOSTINGER_HOST HOSTINGER_PORT HOSTINGER_USERNAME HOSTINGER_PASSWORD HOSTINGER_PUBLIC_HTML_PATH HOSTINGER_APP_PATH; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build Hostinger deployment bundle
+        run: |
+          npm ci
+          npm run build:hostinger
+
+      - name: Install deployment tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Trust Hostinger SSH host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$HOSTINGER_PORT" "$HOSTINGER_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Sync frontend files to public_html
+        run: |
+          sshpass -p "$HOSTINGER_PASSWORD" rsync -az --delete \
+            -e "ssh -p $HOSTINGER_PORT" \
+            .deploy/hostinger/public_html/ \
+            "$HOSTINGER_USERNAME@$HOSTINGER_HOST:$HOSTINGER_PUBLIC_HTML_PATH/"
+
+      - name: Sync Laravel app files
+        run: |
+          sshpass -p "$HOSTINGER_PASSWORD" rsync -az \
+            --exclude='.env' \
+            --exclude='vendor' \
+            --exclude='storage/logs' \
+            --exclude='storage/framework/cache' \
+            --exclude='storage/framework/sessions' \
+            --exclude='storage/framework/testing' \
+            --exclude='storage/framework/views' \
+            -e "ssh -p $HOSTINGER_PORT" \
+            .deploy/hostinger/laravel-pos/ \
+            "$HOSTINGER_USERNAME@$HOSTINGER_HOST:$HOSTINGER_APP_PATH/"
+
+      - name: Run Laravel production commands
+        run: |
+          sshpass -p "$HOSTINGER_PASSWORD" ssh -p "$HOSTINGER_PORT" "$HOSTINGER_USERNAME@$HOSTINGER_HOST" <<EOF
+          set -e
+          cd "$HOSTINGER_APP_PATH"
+          composer install --no-dev --optimize-autoloader --no-scripts
+          php artisan package:discover
+          mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing
+          chmod -R 775 storage bootstrap/cache
+          php artisan migrate --force
+          php artisan optimize:clear
+          php artisan config:cache
+          php artisan route:cache
+          EOF
