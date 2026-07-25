@@ -17,7 +17,7 @@ const NAV_GROUPS = [
       { key: 'pos',          icon: 'bi-cart3',               label: 'POS / Sales',   roles: ['superadmin', 'admin', 'cashier'] },
       { key: 'orders',       icon: 'bi-journal-text',        label: 'Orders',         roles: ['superadmin', 'admin', 'cashier'] },
       { key: 'credits',      icon: 'bi-credit-card-2-front', label: 'Credit Ledger', roles: ['superadmin', 'admin'] },
-      { key: 'transactions', icon: 'bi-receipt-cutoff',      label: 'Transactions',  roles: ['superadmin', 'admin'] },
+      { key: 'transactions', icon: 'bi-receipt-cutoff',      label: 'Transactions',  roles: ['superadmin', 'admin', 'cashier'] },
     ],
   },
   {
@@ -28,8 +28,9 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Analytics',
+    label: 'Finance',
     items: [
+      { key: 'expenses', icon: 'bi-wallet2', label: 'Expenses', roles: ['superadmin', 'admin'] },
       { key: 'reports', icon: 'bi-bar-chart-line', label: 'Reports', roles: ['superadmin', 'admin'] },
     ],
   },

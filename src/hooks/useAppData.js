@@ -21,6 +21,8 @@ import {
   createTransaction,
   createStockMovement,
   createExpense,
+  updateExpense,
+  deleteExpense,
   updateSettings,
   fetchOrders,
   createOrder,
@@ -72,7 +74,7 @@ export function useAppData(currentUser) {
     const results = await Promise.all([
       safeFetch(fetchProducts, []),
       safeFetch(fetchCategories, []),
-      canManage ? safeFetch(fetchTransactions, []) : Promise.resolve([]),
+      safeFetch(fetchTransactions, []),
       canManage ? safeFetch(fetchStockMovements, []) : Promise.resolve([]),
       canManage ? safeFetch(fetchExpenses, []) : Promise.resolve([]),
       isSuper ? safeFetch(fetchUsers, []) : Promise.resolve([]),
@@ -246,6 +248,21 @@ export function useAppData(currentUser) {
     return expense;
   }, [logAction, refreshAuditLogs]);
 
+  const handleUpdateExpense = useCallback(async (id, payload) => {
+    const expense = await updateExpense(id, payload);
+    setExpenses(prev => prev.map(row => row.id === expense.id ? expense : row));
+    await logAction(`Updated expense "${payload?.category || id}" (PHP ${Number(payload?.amount || 0).toFixed(2)})`);
+    await refreshAuditLogs();
+    return expense;
+  }, [logAction, refreshAuditLogs]);
+
+  const handleDeleteExpense = useCallback(async (id, label) => {
+    await deleteExpense(id);
+    setExpenses(prev => prev.filter(row => row.id !== id));
+    await logAction(`Deleted expense "${label || id}"`);
+    await refreshAuditLogs();
+  }, [logAction, refreshAuditLogs]);
+
   const handleSaveSettings = useCallback(async (payload) => {
     const updated = await updateSettings(payload);
     setSettings(updated);
@@ -349,29 +366,34 @@ export function useAppData(currentUser) {
     if (!currentUser) return undefined;
 
     const canManage = currentUser.role === 'superadmin' || currentUser.role === 'admin';
-    if (!canManage) return undefined;
 
     const poll = async () => {
       try {
-        const [nextProducts, nextCategories, nextTransactions, nextMovements, nextExpenses, nextAuditLogs, nextOrders, nextCredits] = await Promise.all([
+        const [nextProducts, nextCategories, nextTransactions, nextSettings, nextOrders, nextMovements, nextExpenses, nextAuditLogs, nextCredits] = await Promise.all([
           fetchProducts(),
           fetchCategories(),
           fetchTransactions(),
-          fetchStockMovements(),
-          fetchExpenses(),
-          currentUser.role === 'superadmin' ? fetchAuditLogs() : Promise.resolve([]),
+          fetchSettings(),
           fetchOrders(),
-          fetchCredits(),
+          canManage ? fetchStockMovements() : Promise.resolve([]),
+          canManage ? fetchExpenses() : Promise.resolve([]),
+          currentUser.role === 'superadmin' ? fetchAuditLogs() : Promise.resolve([]),
+          canManage ? fetchCredits() : Promise.resolve([]),
         ]);
 
         setProducts(nextProducts);
         setCategories(nextCategories);
         setTransactions(nextTransactions);
-        setStockMovements(nextMovements);
-        setExpenses(nextExpenses);
-        if (currentUser.role === 'superadmin') setAuditLogs(nextAuditLogs);
+        setSettings(nextSettings || DEFAULT_SETTINGS);
         setOrders(nextOrders);
-        setCredits(nextCredits);
+        if (canManage) {
+          setStockMovements(nextMovements);
+          setExpenses(nextExpenses);
+          setCredits(nextCredits);
+        }
+        if (currentUser.role === 'superadmin') {
+          setAuditLogs(nextAuditLogs);
+        }
       } catch {
         // ignore polling errors
       }
@@ -406,6 +428,8 @@ export function useAppData(currentUser) {
     handleCreateTransaction,
     handleStockIn,
     handleCreateExpense,
+    handleUpdateExpense,
+    handleDeleteExpense,
     handleSaveSettings,
     handleCreateOrder,
     handleUpdateOrder,

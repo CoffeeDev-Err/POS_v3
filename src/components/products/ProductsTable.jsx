@@ -66,7 +66,7 @@ function formatStockDisplay(product) {
   return `${formatQty(stock)} ${baseUnit}`;
 }
 
-export default function ProductsTable({ products, onEdit, onDelete }) {
+export default function ProductsTable({ products, onEdit, onViewHistory, onDelete }) {
   const [pageSize, setPageSize] = useState(25);
   
   const displayedProducts = pageSize === 'all' ? products : products.slice(0, pageSize);
@@ -167,6 +167,9 @@ export default function ProductsTable({ products, onEdit, onDelete }) {
                     <div className="d-flex gap-1 justify-content-center">
                       <button className="btn btn-outline-secondary btn-sm" onClick={() => onEdit(p)} title="Edit">
                         <i className="bi bi-pencil me-1"></i>Edit
+                      </button>
+                      <button className="btn btn-outline-dark btn-sm" onClick={() => onViewHistory(p)} title="View price history">
+                        <i className="bi bi-clock-history me-1"></i>History
                       </button>
                       <button className="btn btn-outline-danger btn-sm" onClick={() => onDelete(p.id)} title="Remove">
                         <i className="bi bi-trash me-1"></i>Remove

@@ -7,6 +7,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const POS = lazy(() => import('./components/POS'));
 const Products = lazy(() => import('./components/Products'));
 const Inventory = lazy(() => import('./components/Inventory'));
+const Expenses = lazy(() => import('./components/Expenses'));
 const Reports = lazy(() => import('./components/Reports'));
 const Users = lazy(() => import('./components/Users'));
 const Settings = lazy(() => import('./components/Settings'));
@@ -63,6 +64,8 @@ export default function App() {
     handleCreateTransaction,
     handleStockIn,
     handleCreateExpense,
+    handleUpdateExpense,
+    handleDeleteExpense,
     handleSaveSettings,
     orders,
     handleCreateOrder,
@@ -243,6 +246,8 @@ export default function App() {
       onCreateTransaction: handleCreateTransaction,
       onStockIn: handleStockIn,
       onCreateExpense: handleCreateExpense,
+      onUpdateExpense: handleUpdateExpense,
+      onDeleteExpense: handleDeleteExpense,
       onSaveSettings: handleSaveSettings,
       orders,
       onCreateOrder: handleCreateOrder,
@@ -264,6 +269,8 @@ export default function App() {
         return <Products {...props} />;
       case 'inventory':
         return <Inventory {...props} />;
+      case 'expenses':
+        return <Expenses {...props} />;
       case 'reports':
         return <Reports {...props} />;
       case 'users':
@@ -286,6 +293,7 @@ export default function App() {
     pos: 'pos',
     products: 'products',
     inventory: 'inventory',
+    expenses: 'page',
     reports: 'reports',
     users: 'users',
     settings: 'settings',

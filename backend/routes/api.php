@@ -42,6 +42,8 @@ Route::middleware('pos.auth')->group(function () {
 
     Route::get('/expenses', [PosApiController::class, 'expenses']);
     Route::post('/expenses', [PosApiController::class, 'createExpense']);
+    Route::match(['put', 'patch'], '/expenses/{id}', [PosApiController::class, 'updateExpense']);
+    Route::delete('/expenses/{id}', [PosApiController::class, 'deleteExpense']);
 
     Route::get('/audit-logs', [PosApiController::class, 'auditLogs']);
     Route::post('/audit-logs', [PosApiController::class, 'addAuditLog']);

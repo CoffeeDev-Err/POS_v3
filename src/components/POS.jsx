@@ -168,7 +168,7 @@ export default function POS({ products, currentUser, categories, settings, onCre
   };
 
   // Derived totals
-  const subtotal = incomingCart.reduce((s, i) => s + i.total, 0);
+  const subtotal = incomingCart.reduce((s, i) => s + Number(i.total || 0), 0);
   const cash     = parseFloat(cashInput) || 0;
   const change   = cash - subtotal;
 

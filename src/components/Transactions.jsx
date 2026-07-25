@@ -15,7 +15,8 @@ function todayStr() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-export default function Transactions({ transactions, orders, settings, onVoidTransaction }) {
+export default function Transactions({ transactions, orders, settings, onVoidTransaction, currentUser }) {
+  const canVoidTransactions = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
   const [activeTab, setActiveTab] = useState('completed');
   const [rangeMode, setRangeMode] = useState('today');
   const [singleDate, setSingleDate] = useState(todayStr);
@@ -80,8 +81,8 @@ export default function Transactions({ transactions, orders, settings, onVoidTra
     { key: 'pending',    label: 'Pending',    count: pendingOrders.length,    data: pendingOrders,    badge: 'bg-warning text-dark' },
     { key: 'onprocess',  label: 'On Process', count: onProcessOrders.length,  data: onProcessOrders,  badge: 'bg-primary' },
     { key: 'completed',  label: 'Completed',  count: completedTxns.length,    data: completedTxns,    badge: 'bg-success' },
-    { key: 'void',       label: 'Void',       count: voidTxns.length,         data: voidTxns,         badge: 'bg-secondary' },
-  ];
+    canVoidTransactions ? { key: 'void', label: 'Void', count: voidTxns.length, data: voidTxns, badge: 'bg-secondary' } : null,
+  ].filter(Boolean);
 
   const activeData = TABS.find(t => t.key === activeTab)?.data || [];
 
@@ -247,7 +248,7 @@ export default function Transactions({ transactions, orders, settings, onVoidTra
                     <th>Type</th>
                     <th>Receipt</th>
                     <th className="text-end">Amount</th>
-                    {activeTab === 'completed' && <th></th>}
+                    {activeTab === 'completed' && canVoidTransactions && <th></th>}
                     {activeTab === 'void' && <th>Void Reason</th>}
                   </tr>
                 </thead>
@@ -278,7 +279,7 @@ export default function Transactions({ transactions, orders, settings, onVoidTra
                       <td className="text-end fw-bold">
                         ₱{Number(item.subtotal || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      {activeTab === 'completed' && (
+                      {activeTab === 'completed' && canVoidTransactions && (
                         <td>
                           <button
                             className="btn btn-sm btn-outline-danger py-0 px-2"

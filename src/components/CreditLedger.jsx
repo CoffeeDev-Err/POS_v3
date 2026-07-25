@@ -225,19 +225,19 @@ export default function CreditLedger({
         type: 'transaction',
       }));
 
-    const paidCredits = (credits || [])
-      .filter(c => c.status === 'paid')
-      .map(c => ({
-        id: c.id,
-        date: c.startDate,
+    const creditPayments = (credits || []).flatMap(c =>
+      (c.payments || []).map((payment, index) => ({
+        id: `${c.id}-${index}`,
+        date: payment.date,
         customerName: c.customerName || '—',
         orNumber: c.orNumber || c.id,
-        paymentMethod: 'credit (settled)',
-        amount: c.totalAmount || 0,
-        type: 'credit',
-      }));
+        paymentMethod: 'credit payment',
+        amount: Number(payment.amount || 0),
+        type: 'credit-payment',
+      }))
+    );
 
-    return [...cashTxns, ...paidCredits].sort((a, b) =>
+    return [...cashTxns, ...creditPayments].sort((a, b) =>
       (b.date || '').localeCompare(a.date || '')
     );
   }, [transactions, credits]);

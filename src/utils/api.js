@@ -133,6 +133,10 @@ export const updateSettings = (payload) => request('/settings', { method: 'PATCH
 // ---- expenses ----
 export const fetchExpenses = (from, to) => request(`/expenses${queryString({ from, to })}`);
 export const createExpense = (payload) => request('/expenses', { method: 'POST', body: payload });
+export const updateExpense = (id, payload) =>
+  request(`/expenses/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload });
+export const deleteExpense = (id) =>
+  request(`/expenses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ---- audit logs ----
 export const fetchAuditLogs = () => request('/audit-logs');

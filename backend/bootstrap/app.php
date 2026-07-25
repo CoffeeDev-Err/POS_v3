@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 // Preserve an intentionally blank API prefix for one-domain deployments like Hostinger.
@@ -28,8 +29,21 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (\Throwable $throwable, $request) {
-            if (!$request->is('api/*')) {
+            if (!$request->expectsJson() && !$request->is('api/*')) {
                 return null;
+            }
+
+            if ($throwable instanceof ValidationException) {
+                $errors = $throwable->errors();
+                $firstFieldErrors = reset($errors);
+                $message = is_array($firstFieldErrors) && isset($firstFieldErrors[0])
+                    ? $firstFieldErrors[0]
+                    : 'The provided data is invalid.';
+
+                return response()->json([
+                    'message' => $message,
+                    'errors' => $errors,
+                ], 422);
             }
 
             // API consumers should always get JSON errors, even for framework-level exceptions.

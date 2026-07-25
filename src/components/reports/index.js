@@ -3,7 +3,5 @@ export { default as ReportsSummaryCards } from './ReportsSummaryCards';
 export { default as StockInsightsCards } from './StockInsightsCards';
 export { default as TransactionHistoryTable } from './TransactionHistoryTable';
 export { default as ProductBreakdownCards } from './ProductBreakdownCards';
-export { default as ExpensesTable } from './ExpensesTable';
 export { default as TransactionDetailModal } from './TransactionDetailModal';
-export { default as ExpenseModal } from './ExpenseModal';
 export { default as ReportsSkeleton } from './ReportsSkeleton';

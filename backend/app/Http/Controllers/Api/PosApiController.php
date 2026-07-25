@@ -131,9 +131,17 @@ class PosApiController extends Controller
 
     public function createProduct(Request $request)
     {
-        $this->requireUser($request);
+        $actor = $this->requireUser($request);
         $payload = $request->all();
         $now = now();
+        $payload['priceHistory'] = [
+            $this->buildProductPriceHistoryEntry(
+                null,
+                $this->productPricingSnapshot($payload),
+                $actor,
+                'created'
+            ),
+        ];
 
         $id = DB::table('products')->insertGetId([
             'name' => (string) ($payload['name'] ?? ''),
@@ -152,13 +160,23 @@ class PosApiController extends Controller
 
     public function updateProduct(Request $request, string $id)
     {
-        $this->requireUser($request);
+        $actor = $this->requireUser($request);
         $row = DB::table('products')->find($id);
         if (!$row) {
             return response()->json(['message' => 'Product not found.'], 404);
         }
 
-        $payload = array_merge($this->decode($row->data), $request->all());
+        $existingData = $this->decode($row->data);
+        $payload = array_merge($existingData, $request->all());
+        $beforePricing = $this->productPricingSnapshot($this->productResource($row) ?? []);
+        $afterPricing = $this->productPricingSnapshot($payload);
+        $history = array_values(array_filter($existingData['priceHistory'] ?? [], 'is_array'));
+
+        if ($this->productPricingChanged($beforePricing, $afterPricing)) {
+            array_unshift($history, $this->buildProductPriceHistoryEntry($beforePricing, $afterPricing, $actor));
+        }
+
+        $payload['priceHistory'] = array_slice($history, 0, 50);
 
         DB::table('products')->where('id', $id)->update([
             'name' => (string) ($payload['name'] ?? $row->name),
@@ -341,9 +359,14 @@ class PosApiController extends Controller
 
     public function transactions(Request $request)
     {
-        $this->requireUser($request);
+        $actor = $this->requireUser($request);
+        $query = DB::table('transactions')->orderByDesc('created_at');
 
-        return response()->json(DB::table('transactions')->orderByDesc('created_at')->get()->map(fn ($row) => $this->transactionResource($row))->values());
+        if (($actor->role ?? null) === 'cashier') {
+            $query->where('cashier_id', $actor->id);
+        }
+
+        return response()->json($query->get()->map(fn ($row) => $this->transactionResource($row))->values());
     }
 
     public function createTransaction(Request $request)
@@ -354,11 +377,23 @@ class PosApiController extends Controller
         // Sales write multiple tables at once, so we keep the inventory mutation atomic.
         $result = DB::transaction(function () use ($payload, $actor) {
             [$date, $time] = $this->dateTimeParts();
-            $subtotal = collect($payload['items'] ?? [])->sum(fn ($item) => $this->number($item['total'] ?? 0));
+            $normalizedItems = $this->normalizeLineItems($payload['items'] ?? []);
+            $subtotal = $this->sumLineItemTotals($normalizedItems);
             $cashierId = $payload['cashierId'] ?? $actor->id;
             $cashier = $cashierId ? DB::table('users')->find($cashierId) : null;
             $cashierName = $cashier?->name ?? $actor->name ?? 'Unknown';
             $orNumber = $this->nextOrNumber();
+            $paymentMethod = (string) ($payload['paymentMethod'] ?? 'cash');
+            $cash = $paymentMethod === 'cash'
+                ? $this->roundMoney($payload['cash'] ?? 0)
+                : $subtotal;
+            $change = $paymentMethod === 'cash'
+                ? $this->roundMoney($cash - $subtotal)
+                : 0.0;
+
+            if ($paymentMethod === 'cash' && $cash < $subtotal) {
+                return ['error' => ['message' => 'Cash received is not enough to cover the total amount.', 'status' => 422]];
+            }
 
             $data = array_merge($payload, [
                 'date' => $date,
@@ -367,8 +402,10 @@ class PosApiController extends Controller
                 'cashierName' => $cashierName,
                 'cashierId' => (string) $cashierId,
                 'orNumber' => $orNumber,
-                'cash' => $this->number($payload['cash'] ?? 0),
-                'change' => $this->number($payload['change'] ?? 0),
+                'paymentMethod' => $paymentMethod,
+                'cash' => $cash,
+                'change' => $change,
+                'items' => $normalizedItems,
             ]);
 
             $id = DB::table('transactions')->insertGetId([
@@ -377,10 +414,10 @@ class PosApiController extends Controller
                 'time' => $time,
                 'cashier_id' => $cashierId,
                 'cashier_name' => $cashierName,
-                'payment_method' => $payload['paymentMethod'] ?? null,
+                'payment_method' => $paymentMethod,
                 'subtotal' => $subtotal,
                 'status' => $payload['status'] ?? null,
-                'items' => $this->json($payload['items'] ?? []),
+                'items' => $this->json($normalizedItems),
                 'customer' => $this->json($payload['customer'] ?? []),
                 'data' => $this->json($data),
                 'created_at' => now(),
@@ -388,7 +425,7 @@ class PosApiController extends Controller
             ]);
 
             $updatedProducts = [];
-            foreach (($payload['items'] ?? []) as $item) {
+            foreach ($normalizedItems as $item) {
                 $conversionRate = $this->number($item['conversionRate'] ?? 1);
                 $updatedProduct = $this->adjustProductStock(
                     (string) ($item['productId'] ?? ''),
@@ -408,7 +445,7 @@ class PosApiController extends Controller
                     'customerName' => $customer['name'] ?? '',
                     'customerContact' => $customer['contact'] ?? '',
                     'customerAddress' => $customer['address'] ?? '',
-                    'items' => $payload['items'] ?? [],
+                    'items' => $normalizedItems,
                     'totalAmount' => $subtotal,
                     'dueDate' => $payload['dueDate'] ?? '',
                     'cashierId' => (string) $cashierId,
@@ -422,6 +459,10 @@ class PosApiController extends Controller
                 'credit' => $credit,
             ];
         });
+
+        if (isset($result['error'])) {
+            return response()->json(['message' => $result['error']['message']], $result['error']['status']);
+        }
 
         return response()->json($result, 201);
     }
@@ -497,7 +538,7 @@ class PosApiController extends Controller
 
     public function expenses(Request $request)
     {
-        $this->requireUser($request);
+        $this->requireManager($request);
         $query = DB::table('expenses')->orderByDesc('created_at');
         if ($request->query('from') && $request->query('to')) {
             $query->whereBetween('date', [$request->query('from'), $request->query('to')]);
@@ -508,19 +549,53 @@ class PosApiController extends Controller
 
     public function createExpense(Request $request)
     {
-        $this->requireUser($request);
-        $payload = $request->all();
+        $this->requireManager($request);
+        $payload = $this->validateExpense($request);
         $id = DB::table('expenses')->insertGetId([
-            'date' => $payload['date'] ?? now()->format('Y-m-d'),
+            'date' => $payload['date'],
             'name' => $payload['name'] ?? null,
-            'category' => $payload['category'] ?? null,
-            'amount' => $this->number($payload['amount'] ?? 0),
+            'category' => $payload['category'],
+            'amount' => $this->roundMoney($payload['amount']),
             'data' => $this->json($payload),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         return response()->json($this->expenseResource(DB::table('expenses')->find($id)), 201);
+    }
+
+    public function updateExpense(Request $request, string $id)
+    {
+        $this->requireManager($request);
+        $row = DB::table('expenses')->find($id);
+        if (!$row) {
+            return response()->json(['message' => 'The specified expense could not be found.'], 404);
+        }
+
+        $payload = $this->validateExpense($request);
+        $data = array_merge($this->decode($row->data), $payload);
+
+        DB::table('expenses')->where('id', $id)->update([
+            'date' => $payload['date'],
+            'name' => $payload['name'] ?? null,
+            'category' => $payload['category'],
+            'amount' => $this->roundMoney($payload['amount']),
+            'data' => $this->json($data),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json($this->expenseResource(DB::table('expenses')->find($id)));
+    }
+
+    public function deleteExpense(Request $request, string $id)
+    {
+        $this->requireManager($request);
+        $deleted = DB::table('expenses')->where('id', $id)->delete();
+        if (!$deleted) {
+            return response()->json(['message' => 'The specified expense could not be found.'], 404);
+        }
+
+        return response()->noContent();
     }
 
     public function auditLogs(Request $request)
@@ -559,9 +634,14 @@ class PosApiController extends Controller
 
     public function orders(Request $request)
     {
-        $this->requireUser($request);
+        $actor = $this->requireUser($request);
+        $query = DB::table('orders')->orderByDesc('created_at');
 
-        return response()->json(DB::table('orders')->orderByDesc('created_at')->get()->map(fn ($row) => $this->orderResource($row))->values());
+        if (($actor->role ?? null) === 'cashier') {
+            $query->where('cashier_id', $actor->id);
+        }
+
+        return response()->json($query->get()->map(fn ($row) => $this->orderResource($row))->values());
     }
 
     public function createOrder(Request $request)
@@ -572,7 +652,8 @@ class PosApiController extends Controller
         $cashierId = $payload['cashierId'] ?? $actor->id;
         $cashier = $cashierId ? DB::table('users')->find($cashierId) : null;
         $cashierName = $cashier?->name ?? $actor->name ?? 'Unknown';
-        $subtotal = collect($payload['items'] ?? [])->sum(fn ($item) => $this->number($item['total'] ?? 0));
+        $normalizedItems = $this->normalizeLineItems($payload['items'] ?? []);
+        $subtotal = $this->sumLineItemTotals($normalizedItems);
 
         $data = array_merge([
             'status' => 'pending',
@@ -585,6 +666,7 @@ class PosApiController extends Controller
             'updatedByName' => $cashierName,
             'updatedAtText' => "{$date} {$time}:00",
             'editLock' => null,
+            'items' => $normalizedItems,
         ]);
 
         $id = DB::table('orders')->insertGetId([
@@ -594,7 +676,7 @@ class PosApiController extends Controller
             'cashier_id' => $cashierId,
             'cashier_name' => $cashierName,
             'subtotal' => $subtotal,
-            'items' => $this->json($payload['items'] ?? []),
+            'items' => $this->json($normalizedItems),
             'customer' => $this->json($payload['customer'] ?? []),
             'edit_lock' => null,
             'data' => $this->json($data),
@@ -621,7 +703,15 @@ class PosApiController extends Controller
         $updatedById = $actor['id'] ?? $before['updatedById'] ?? '';
         $updatedByName = $actor['name'] ?? $before['updatedByName'] ?? 'System';
         $updatedAtText = $this->localDateTimeText();
+        $normalizedItems = array_key_exists('items', $payload)
+            ? $this->normalizeLineItems($payload['items'] ?? [])
+            : ($this->decode($row->items));
+        $nextSubtotal = array_key_exists('items', $payload) || array_key_exists('subtotal', $payload)
+            ? $this->sumLineItemTotals($normalizedItems)
+            : $this->number($row->subtotal);
         $data = array_merge($this->decode($row->data), $payload, [
+            'items' => $normalizedItems,
+            'subtotal' => $nextSubtotal,
             'updatedById' => (string) $updatedById,
             'updatedByName' => $updatedByName,
             'updatedAtText' => $updatedAtText,
@@ -629,8 +719,8 @@ class PosApiController extends Controller
 
         DB::table('orders')->where('id', $id)->update([
             'status' => $data['status'] ?? $row->status,
-            'subtotal' => $this->number($data['subtotal'] ?? $row->subtotal),
-            'items' => $this->json($data['items'] ?? $this->decode($row->items)),
+            'subtotal' => $nextSubtotal,
+            'items' => $this->json($normalizedItems),
             'customer' => $this->json($data['customer'] ?? $this->decode($row->customer)),
             'edit_lock' => $this->json($data['editLock'] ?? null),
             'data' => $this->json($data),
@@ -795,7 +885,11 @@ class PosApiController extends Controller
 
     public function voidTransaction(Request $request, string $id)
     {
-        $this->requireUser($request);
+        $actor = $this->requireUser($request);
+        if (($actor->role ?? null) === 'cashier') {
+            return response()->json(['message' => 'Cashier accounts are not allowed to void transactions.'], 403);
+        }
+
         $result = DB::transaction(function () use ($request, $id) {
             $row = DB::table('transactions')->find($id);
             if (!$row) {
@@ -929,6 +1023,96 @@ class PosApiController extends Controller
         return str_pad((string) $count, 10, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * Reduce a product to a stable pricing snapshot so changes stay easy to audit.
+     */
+    private function productPricingSnapshot(array $product): array
+    {
+        $hasVariants = (bool) ($product['hasVariants'] ?? false);
+        if ($hasVariants) {
+            $variants = array_map(function ($variant) use ($product) {
+                return [
+                    'id' => (string) ($variant['id'] ?? ''),
+                    'name' => (string) ($variant['name'] ?? ''),
+                    'unit' => (string) ($variant['unit'] ?? $product['baseUnit'] ?? 'pc'),
+                    'conversionRate' => $this->number($variant['conversionRate'] ?? 1),
+                    'priceRetail' => $this->number($variant['priceRetail'] ?? $variant['price'] ?? 0),
+                    'priceWholesale' => array_key_exists('priceWholesale', $variant) && $variant['priceWholesale'] !== null && $variant['priceWholesale'] !== ''
+                        ? $this->number($variant['priceWholesale'])
+                        : null,
+                    'wholesaleQtyThreshold' => (int) ($variant['wholesaleQtyThreshold'] ?? 0),
+                    'cost' => $this->number($variant['cost'] ?? 0),
+                ];
+            }, array_values($product['variants'] ?? []));
+
+            usort($variants, fn ($left, $right) => strcmp(($left['name'] ?? '').'|'.($left['id'] ?? ''), ($right['name'] ?? '').'|'.($right['id'] ?? '')));
+
+            return [
+                'hasVariants' => true,
+                'baseUnit' => (string) ($product['baseUnit'] ?? $product['unit'] ?? 'pc'),
+                'variants' => $variants,
+            ];
+        }
+
+        return [
+            'hasVariants' => false,
+            'unit' => (string) ($product['unit'] ?? $product['baseUnit'] ?? 'pc'),
+            'priceRetail' => $this->number($product['priceRetail'] ?? $product['price'] ?? 0),
+            'priceWholesale' => array_key_exists('priceWholesale', $product) && $product['priceWholesale'] !== null && $product['priceWholesale'] !== ''
+                ? $this->number($product['priceWholesale'])
+                : null,
+            'wholesaleQtyThreshold' => (int) ($product['wholesaleQtyThreshold'] ?? 0),
+            'cost' => $this->number($product['cost'] ?? 0),
+        ];
+    }
+
+    private function productPricingChanged(array $before, array $after): bool
+    {
+        return json_encode($before) !== json_encode($after);
+    }
+
+    private function buildProductPriceHistoryEntry(?array $before, array $after, object $actor, string $type = 'updated'): array
+    {
+        return [
+            'id' => (string) Str::uuid(),
+            'type' => $type,
+            'changedAt' => now()->toIso8601String(),
+            'changedById' => isset($actor->id) ? (string) $actor->id : '',
+            'changedByName' => $actor->name ?? 'System',
+            'before' => $before,
+            'after' => $after,
+        ];
+    }
+
+    /**
+     * Normalize sale/order items so all money and quantity math is consistent server-side.
+     */
+    private function normalizeLineItems(array $items): array
+    {
+        return array_values(array_map(function ($item) {
+            $qty = $this->number($item['qty'] ?? 0);
+            $price = $this->roundMoney($item['price'] ?? 0);
+            $cost = array_key_exists('cost', $item) ? $this->roundMoney($item['cost']) : null;
+            $total = $this->roundMoney($qty * $price);
+
+            return array_merge(is_array($item) ? $item : [], [
+                'qty' => $qty,
+                'price' => $price,
+                'cost' => $cost,
+                'conversionRate' => $this->number($item['conversionRate'] ?? 1),
+                'total' => $total,
+            ]);
+        }, $items));
+    }
+
+    private function sumLineItemTotals(array $items): float
+    {
+        return $this->roundMoney(array_sum(array_map(
+            fn ($item) => $this->number($item['total'] ?? 0),
+            $items
+        )));
+    }
+
     private function requireUser(Request $request): object
     {
         // Prefer the middleware-attached user to avoid repeated token lookups in the same request.
@@ -948,6 +1132,27 @@ class PosApiController extends Controller
         }
 
         return $user;
+    }
+
+    private function requireManager(Request $request): object
+    {
+        $user = $this->requireUser($request);
+        if (!in_array($user->role ?? null, ['superadmin', 'admin'], true)) {
+            abort(403, 'You are not allowed to manage expenses.');
+        }
+
+        return $user;
+    }
+
+    private function validateExpense(Request $request): array
+    {
+        return $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+            'name' => ['nullable', 'string', 'max:150'],
+            'category' => ['required', 'string', 'max:100'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:999999999.99'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
     }
 
     /**
@@ -1168,6 +1373,11 @@ class PosApiController extends Controller
     private function number(mixed $value): float
     {
         return (float) ($value ?? 0);
+    }
+
+    private function roundMoney(mixed $value): float
+    {
+        return round($this->number($value), 2);
     }
 
     private function dateOnly(mixed $value): ?string

@@ -184,6 +184,84 @@ class PosApiTest extends TestCase
         ])->assertOk()->assertJsonPath('user.username', 'owner');
     }
 
+    public function test_expense_management_supports_crud_and_rejects_cashiers(): void
+    {
+        $adminToken = $this->bearerToken();
+
+        $expense = $this->withToken($adminToken)
+            ->postJson('/api/expenses', [
+                'date' => '2026-07-25',
+                'category' => 'Fuel',
+                'amount' => 750.50,
+                'note' => 'Delivery fuel',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('category', 'Fuel')
+            ->assertJsonPath('amount', 750.5)
+            ->assertJsonPath('note', 'Delivery fuel')
+            ->json();
+
+        $this->withToken($adminToken)
+            ->patchJson("/api/expenses/{$expense['id']}", [
+                'date' => '2026-07-26',
+                'category' => 'Transportation',
+                'amount' => 825.75,
+                'note' => 'Updated delivery cost',
+            ])
+            ->assertOk()
+            ->assertJsonPath('date', '2026-07-26')
+            ->assertJsonPath('category', 'Transportation')
+            ->assertJsonPath('amount', 825.75)
+            ->assertJsonPath('note', 'Updated delivery cost');
+
+        $this->withToken($adminToken)
+            ->postJson('/api/expenses', [
+                'date' => '2026-07-25',
+                'category' => 'Invalid',
+                'amount' => 0,
+            ])
+            ->assertUnprocessable();
+
+        $cashier = $this->withToken($adminToken)
+            ->postJson('/api/users', [
+                'name' => 'Expense Cashier',
+                'username' => 'expensecashier',
+                'email' => 'expensecashier@example.test',
+                'role' => 'cashier',
+                'password' => 'secret123',
+                'active' => true,
+            ])
+            ->assertCreated()
+            ->json();
+
+        $cashierToken = $this->postJson('/api/login', [
+            'username' => $cashier['username'],
+            'password' => 'secret123',
+        ])->assertOk()->json('token');
+
+        $this->withToken($cashierToken)
+            ->getJson('/api/expenses')
+            ->assertForbidden()
+            ->assertJsonPath('message', 'You are not allowed to manage expenses.');
+
+        $this->withToken($cashierToken)
+            ->postJson('/api/expenses', [
+                'date' => '2026-07-25',
+                'category' => 'Supplies',
+                'amount' => 100,
+            ])
+            ->assertForbidden();
+
+        $this->withToken($adminToken)
+            ->deleteJson("/api/expenses/{$expense['id']}")
+            ->assertNoContent();
+
+        $this->withToken($adminToken)
+            ->getJson('/api/expenses')
+            ->assertOk()
+            ->assertJsonCount(0);
+    }
+
     public function test_category_and_product_delete_flows_work(): void
     {
         $token = $this->bearerToken();
@@ -331,7 +409,10 @@ class PosApiTest extends TestCase
         $this->withToken($token)
             ->patchJson("/api/products/{$product['id']}", ['price' => 18])
             ->assertOk()
-            ->assertJsonPath('price', 18);
+            ->assertJsonPath('price', 18)
+            ->assertJsonCount(2, 'priceHistory')
+            ->assertJsonPath('priceHistory.0.type', 'updated')
+            ->assertJsonPath('priceHistory.1.type', 'created');
 
         $this->withToken($token)
             ->postJson('/api/stock-movements', [
@@ -485,5 +566,192 @@ class PosApiTest extends TestCase
         $this->withToken($token)->getJson('/api/expenses')->assertOk()->assertJsonCount(1);
         $this->withToken($token)->getJson('/api/audit-logs')->assertOk()->assertJsonCount(1);
         $this->withToken($token)->getJson('/api/stock-movements')->assertOk()->assertJsonCount(1);
+    }
+
+    public function test_cashiers_only_see_their_own_transactions_and_orders(): void
+    {
+        $adminToken = $this->bearerToken();
+
+        $cashier = $this->withToken($adminToken)
+            ->postJson('/api/users', [
+                'name' => 'Cashier One',
+                'username' => 'cashierone',
+                'email' => 'cashierone@example.test',
+                'role' => 'cashier',
+                'password' => 'secret123',
+                'active' => true,
+            ])
+            ->assertCreated()
+            ->json();
+
+        $cashierToken = $this->postJson('/api/login', [
+            'username' => 'cashierone',
+            'password' => 'secret123',
+        ])->assertOk()->json('token');
+
+        $adminTransaction = $this->withToken($adminToken)
+            ->postJson('/api/transactions', [
+                'paymentMethod' => 'cash',
+                'customer' => ['name' => 'Admin Customer'],
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Admin Manual Item',
+                    'qty' => 1,
+                    'unit' => 'pc',
+                    'price' => 100,
+                    'total' => 100,
+                ]],
+                'cash' => 100,
+                'change' => 0,
+            ])
+            ->assertCreated()
+            ->json('transaction');
+
+        $this->withToken($cashierToken)
+            ->postJson('/api/transactions', [
+                'paymentMethod' => 'cash',
+                'customer' => ['name' => 'Cashier Customer'],
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Cashier Manual Item',
+                    'qty' => 1,
+                    'unit' => 'pc',
+                    'price' => 50,
+                    'total' => 50,
+                ]],
+                'cash' => 100,
+                'change' => 50,
+            ])
+            ->assertCreated();
+
+        $this->withToken($adminToken)
+            ->postJson('/api/orders', [
+                'customer' => ['name' => 'Admin Order'],
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Admin Order Item',
+                    'qty' => 1,
+                    'unit' => 'pc',
+                    'price' => 75,
+                    'total' => 75,
+                ]],
+            ])
+            ->assertCreated();
+
+        $this->withToken($cashierToken)
+            ->postJson('/api/orders', [
+                'customer' => ['name' => 'Cashier Order'],
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Cashier Order Item',
+                    'qty' => 1,
+                    'unit' => 'pc',
+                    'price' => 60,
+                    'total' => 60,
+                ]],
+            ])
+            ->assertCreated();
+
+        $this->withToken($cashierToken)
+            ->getJson('/api/transactions')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.cashierId', $cashier['id'])
+            ->assertJsonPath('0.customer.name', 'Cashier Customer');
+
+        $this->withToken($cashierToken)
+            ->getJson('/api/orders')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.cashierId', $cashier['id'])
+            ->assertJsonPath('0.customer.name', 'Cashier Order');
+
+        $this->withToken($cashierToken)
+            ->postJson("/api/transactions/{$adminTransaction['id']}/void", [
+                'voidReason' => 'Cashier should not be allowed',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Cashier accounts are not allowed to void transactions.');
+    }
+
+    public function test_backend_recomputes_line_totals_and_subtotals_from_qty_and_price(): void
+    {
+        $token = $this->bearerToken();
+
+        $transaction = $this->withToken($token)
+            ->postJson('/api/transactions', [
+                'paymentMethod' => 'cash',
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Tampered Item',
+                    'qty' => 2,
+                    'unit' => 'pc',
+                    'price' => 15,
+                    'total' => 9999,
+                ]],
+                'cash' => 40,
+                'change' => 9000,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('transaction.subtotal', 30)
+            ->assertJsonPath('transaction.items.0.total', 30)
+            ->assertJsonPath('transaction.cash', 40)
+            ->assertJsonPath('transaction.change', 10)
+            ->json('transaction');
+
+        $order = $this->withToken($token)
+            ->postJson('/api/orders', [
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Tampered Order Item',
+                    'qty' => 3,
+                    'unit' => 'pc',
+                    'price' => 12.5,
+                    'total' => 1,
+                ]],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('subtotal', 37.5)
+            ->assertJsonPath('items.0.total', 37.5)
+            ->json();
+
+        $this->withToken($token)
+            ->patchJson("/api/orders/{$order['id']}", [
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Tampered Order Item',
+                    'qty' => 4,
+                    'unit' => 'pc',
+                    'price' => 12.5,
+                    'total' => 2,
+                ]],
+                'subtotal' => 2,
+            ])
+            ->assertOk()
+            ->assertJsonPath('subtotal', 50)
+            ->assertJsonPath('items.0.total', 50);
+
+        $this->withToken($token)
+            ->postJson('/api/transactions', [
+                'paymentMethod' => 'cash',
+                'items' => [[
+                    'productId' => '',
+                    'name' => 'Insufficient Cash Item',
+                    'qty' => 1,
+                    'unit' => 'pc',
+                    'price' => 50,
+                    'total' => 50,
+                ]],
+                'cash' => 20,
+                'change' => 0,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Cash received is not enough to cover the total amount.');
+
+        $this->withToken($token)
+            ->getJson('/api/transactions')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $transaction['id']);
     }
 }

@@ -2,31 +2,24 @@ import { useState, useMemo } from 'react';
 import { printA4Report } from '../utils/escpos';
 import { toLocalDateString } from '../utils/date';
 import { useReportsData } from '../hooks/useReportsData';
-import { getErrorMessage } from '../utils/errors';
 import {
   ReportsFilters,
   ReportsSummaryCards,
   StockInsightsCards,
   TransactionHistoryTable,
   ProductBreakdownCards,
-  ExpensesTable,
   TransactionDetailModal,
-  ExpenseModal,
 } from './reports/index';
 import LoadingSkeleton from './LoadingSkeleton';
 
 const peso = (value) => `₱${Number(value || 0).toLocaleString()}`;
 
-export default function Reports({ transactions, products, expenses, currentUser, onCreateExpense, loading }) {
+export default function Reports({ transactions, products, expenses, loading }) {
   const today = toLocalDateString();
   const [rangePreset, setRangePreset] = useState('today');
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   const [selectedTxn, setSelectedTxn] = useState(null);
-  const [showExpenseModal, setShowExpenseModal] = useState(false);
-  const [expenseForm, setExpenseForm] = useState({ date: today, amount: '', category: '', note: '' });
-  const [expenseSaving, setExpenseSaving] = useState(false);
-  const [expenseError, setExpenseError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
 
@@ -35,8 +28,6 @@ export default function Reports({ transactions, products, expenses, currentUser,
     [products]
   );
   const handleCategoryChange = (cat) => { setCategoryFilter(cat); setProductFilter(''); };
-
-  const canManage = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
 
   const {
     filteredTransactions,
@@ -191,27 +182,6 @@ export default function Reports({ transactions, products, expenses, currentUser,
     URL.revokeObjectURL(url);
   };
 
-  const handleAddExpense = async () => {
-    if (!expenseForm.date || !expenseForm.category || !expenseForm.amount) return;
-
-    setExpenseSaving(true);
-    setExpenseError('');
-    try {
-      await onCreateExpense({
-        date: expenseForm.date,
-        amount: expenseForm.amount,
-        category: expenseForm.category,
-        note: expenseForm.note,
-      });
-      setExpenseForm({ date: today, amount: '', category: '', note: '' });
-      setShowExpenseModal(false);
-    } catch (err) {
-      setExpenseError(getErrorMessage(err, { fallback: 'Failed to add expense.' }));
-    } finally {
-      setExpenseSaving(false);
-    }
-  };
-
   return (
     <div>
       <ReportsFilters
@@ -263,12 +233,6 @@ export default function Reports({ transactions, products, expenses, currentUser,
             />
           </div>
 
-          <ExpensesTable
-            expenses={filteredExpenses}
-            canManage={canManage}
-            onAddExpense={() => setShowExpenseModal(true)}
-            formatCurrency={peso}
-          />
         </>
       )}
 
@@ -278,15 +242,6 @@ export default function Reports({ transactions, products, expenses, currentUser,
         formatCurrency={peso}
       />
 
-      <ExpenseModal
-        open={showExpenseModal}
-        expenseForm={expenseForm}
-        onChange={setExpenseForm}
-        onClose={() => setShowExpenseModal(false)}
-        onSave={handleAddExpense}
-        saving={expenseSaving}
-        error={expenseError}
-      />
     </div>
   );
 }

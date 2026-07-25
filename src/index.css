@@ -692,6 +692,16 @@ margin-top: 0;
   padding: 1.5rem;
 }
 
+.expense-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+}
+
 /* Table */
 .table {
   font-size: 0.875rem;

@@ -131,9 +131,13 @@ export function normalizeError(error, options = {}) {
   }
 
   if (/failed to fetch|networkerror|load failed/i.test(rawMessage)) {
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
     return {
-      title: 'Connection problem',
-      message: 'Cannot reach the server right now. Please check if the Laravel API is running.',
+      title: isOffline ? 'No internet connection' : 'Connection problem',
+      message: isOffline
+        ? 'You appear to be offline. Please check your internet connection and try again.'
+        : 'Unable to connect right now. Please try again in a moment.',
       severity: 'danger',
       status,
       code,

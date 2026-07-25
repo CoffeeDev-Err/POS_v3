@@ -8,6 +8,63 @@ import {
 } from './products/index';
 import { getErrorMessage } from '../utils/errors';
 
+function formatMoney(value) {
+  return `PHP ${Number(value || 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function renderPricingSnapshot(snapshot) {
+  if (!snapshot) {
+    return <div className="small text-muted">No pricing snapshot recorded.</div>;
+  }
+
+  if (snapshot.hasVariants) {
+    const variants = Array.isArray(snapshot.variants) ? snapshot.variants : [];
+
+    return (
+      <div className="d-flex flex-column gap-2">
+        {variants.map((variant, index) => (
+          <div key={variant.id || `${variant.name || 'variant'}-${index}`} className="border rounded p-2 bg-body-tertiary">
+            <div className="fw-semibold">{variant.name || `Variant ${index + 1}`}</div>
+            <div className="small text-muted mb-1">{variant.unit || snapshot.baseUnit || 'pc'}</div>
+            <div className="small">Retail: <strong>{formatMoney(variant.priceRetail)}</strong></div>
+            {variant.priceWholesale != null && (
+              <div className="small">Wholesale: <strong>{formatMoney(variant.priceWholesale)}</strong></div>
+            )}
+            <div className="small">Cost: <strong>{formatMoney(variant.cost)}</strong></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="d-flex flex-column gap-1 small">
+      <div>Retail: <strong>{formatMoney(snapshot.priceRetail)}</strong></div>
+      {snapshot.priceWholesale != null && (
+        <div>Wholesale: <strong>{formatMoney(snapshot.priceWholesale)}</strong></div>
+      )}
+      <div>Cost: <strong>{formatMoney(snapshot.cost)}</strong></div>
+      <div className="text-muted">Unit: {snapshot.unit || 'pc'}</div>
+    </div>
+  );
+}
+
 const EMPTY = {
   name: '', category: '',
   hasVariants: false,
@@ -35,6 +92,7 @@ export default function Products({
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState({ ...EMPTY, category: categories[0] || '' });
   const [deleteId, setDeleteId] = useState(null);
+  const [historyProduct, setHistoryProduct] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -228,6 +286,7 @@ export default function Products({
       <ProductsTable
         products={filtered}
         onEdit={openEdit}
+        onViewHistory={setHistoryProduct}
         onDelete={setDeleteId}
       />
 
@@ -254,6 +313,74 @@ export default function Products({
         onConfirm={handleDelete}
         saving={saving}
       />
+
+      {historyProduct && (
+        <div className="modal fade show d-block" style={{ background: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <div>
+                  <h5 className="modal-title mb-1">
+                    <i className="bi bi-clock-history me-2"></i>
+                    {historyProduct.name} Price History
+                  </h5>
+                  <div className="small text-muted">
+                    Track cost and selling price changes for this product.
+                  </div>
+                </div>
+                <button className="btn-close" onClick={() => setHistoryProduct(null)} aria-label="Close" />
+              </div>
+              <div className="modal-body">
+                {(historyProduct.priceHistory || []).length === 0 ? (
+                  <div className="text-center text-muted py-4">
+                    <i className="bi bi-clock-history fs-2 d-block mb-2"></i>
+                    No price history recorded yet.
+                  </div>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {historyProduct.priceHistory.map((entry, index) => (
+                      <div key={entry.id || `${historyProduct.id}-history-${index}`} className="border rounded-3 p-3">
+                        <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                          <div>
+                            <div className="fw-semibold text-capitalize">{entry.type || 'updated'}</div>
+                            <div className="small text-muted">{formatDateTime(entry.changedAt)}</div>
+                          </div>
+                          <div className="small text-muted">
+                            Changed by <strong>{entry.changedByName || 'System'}</strong>
+                          </div>
+                        </div>
+
+                        {entry.before ? (
+                          <div className="row g-3">
+                            <div className="col-md-6">
+                              <div className="small text-muted fw-semibold mb-2">Before</div>
+                              {renderPricingSnapshot(entry.before)}
+                            </div>
+                            <div className="col-md-6">
+                              <div className="small text-muted fw-semibold mb-2">After</div>
+                              {renderPricingSnapshot(entry.after)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="small text-muted fw-semibold mb-2">Initial pricing</div>
+                            {renderPricingSnapshot(entry.after)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setHistoryProduct(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
