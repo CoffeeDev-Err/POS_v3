@@ -1,4 +1,4 @@
-# POS v3 â€” 8ShineRice
+# POS v3 — 8ShineRice
 
 A full-stack point-of-sale and inventory management system built for retail workflows. The application combines a responsive React interface with a Laravel API and MySQL persistence for sales, inventory, expenses, customer credit, users, and reporting.
 
@@ -28,11 +28,11 @@ A full-stack point-of-sale and inventory management system built for retail work
 
 ```text
 POS_v3/
-â”œâ”€â”€ src/         # React pages, components, hooks, and API client
-â”œâ”€â”€ public/      # Static web assets
-â”œâ”€â”€ backend/     # Laravel API, migrations, tests, and seeders
-â”œâ”€â”€ scripts/     # Deployment bundle preparation
-â””â”€â”€ DEPLOY.md    # Production deployment instructions
+├── src/         # React pages, components, hooks, and API client
+├── public/      # Static web assets
+├── backend/     # Laravel API, migrations, tests, and seeders
+├── scripts/     # Deployment bundle preparation
+└── DEPLOY.md    # Production deployment instructions
 ```
 
 ## Requirements
