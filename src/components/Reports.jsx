@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { printA4Report } from '../utils/escpos';
 import { toLocalDateString } from '../utils/date';
+import { escapeHtml } from '../utils/html';
 import { useReportsData } from '../hooks/useReportsData';
 import {
   ReportsFilters,
@@ -71,38 +72,38 @@ export default function Reports({ transactions, products, expenses, loading }) {
   const handlePrintReport = () => {
     const rows = filteredTransactions.slice().reverse().map(t => `
       <tr>
-        <td>${t.orNumber || t.id}</td>
-        <td>${t.date}</td>
-        <td>${t.time}</td>
-        <td>${t.cashierName}</td>
+        <td>${escapeHtml(t.orNumber || t.id)}</td>
+        <td>${escapeHtml(t.date)}</td>
+        <td>${escapeHtml(t.time)}</td>
+        <td>${escapeHtml(t.cashierName)}</td>
         <td>${t.items.length}</td>
-        <td class="text-right">${peso(t.subtotal)}</td>
+        <td class="text-right">${escapeHtml(peso(t.subtotal))}</td>
       </tr>
     `).join('');
 
     const itemRows = topSellingByAmount.map(i => `
       <tr>
-        <td>${i.name}</td>
-        <td>${i.qty}</td>
-        <td class="text-right">${peso(i.amount)}</td>
+        <td>${escapeHtml(i.name)}</td>
+        <td>${escapeHtml(i.qty)}</td>
+        <td class="text-right">${escapeHtml(peso(i.amount))}</td>
       </tr>
     `).join('');
 
     const expenseRows = filteredExpenses.map(e => `
       <tr>
-        <td>${e.date}</td>
-        <td>${e.category}</td>
-        <td>${e.note || ''}</td>
-        <td class="text-right">${peso(e.amount)}</td>
+        <td>${escapeHtml(e.date)}</td>
+        <td>${escapeHtml(e.category)}</td>
+        <td>${escapeHtml(e.note)}</td>
+        <td class="text-right">${escapeHtml(peso(e.amount))}</td>
       </tr>
     `).join('');
 
     const filterLabel = productFilter
-      ? ` | Product: ${products.find(p => p.id === productFilter)?.name || productFilter}`
-      : categoryFilter ? ` | Category: ${categoryFilter}` : '';
+      ? ` | Product: ${escapeHtml(products.find(p => p.id === productFilter)?.name || productFilter)}`
+      : categoryFilter ? ` | Category: ${escapeHtml(categoryFilter)}` : '';
     const html = `
       <h1>8ShineRice — Sales Report</h1>
-      <p>Period: <strong>${fromDate}</strong> to <strong>${toDate}</strong>${filterLabel} | Generated: ${new Date().toLocaleString()}</p>
+      <p>Period: <strong>${escapeHtml(fromDate)}</strong> to <strong>${escapeHtml(toDate)}</strong>${filterLabel} | Generated: ${escapeHtml(new Date().toLocaleString())}</p>
       <div style="display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;">
         <div class="summary-box"><div style="font-size:20pt;font-weight:bold;">${peso(dailySales)}</div><div>Daily Sales</div></div>
         <div class="summary-box"><div style="font-size:20pt;font-weight:bold;">${peso(totals.totalSales)}</div><div>Total Sales</div></div>
@@ -115,7 +116,7 @@ export default function Reports({ transactions, products, expenses, loading }) {
       <table>
         <thead><tr><th>OR #</th><th>Date</th><th>Time</th><th>Cashier</th><th>Items</th><th>Amount</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="5"><strong>TOTAL</strong></td><td class="text-right"><strong>${peso(totals.totalSales)}</strong></td></tr></tfoot>
+        <tfoot><tr><td colspan="5"><strong>TOTAL</strong></td><td class="text-right"><strong>${escapeHtml(peso(totals.totalSales))}</strong></td></tr></tfoot>
       </table>
       <h2 style="margin-top:20px;">Product Sales Breakdown</h2>
       <table>

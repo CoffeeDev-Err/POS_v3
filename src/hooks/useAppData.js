@@ -111,8 +111,13 @@ export function useAppData(currentUser) {
 
   const refreshAuditLogs = useCallback(async () => {
     if (currentUser?.role !== 'superadmin') return;
-    const logs = await fetchAuditLogs();
-    setAuditLogs(logs);
+    try {
+      const logs = await fetchAuditLogs();
+      setAuditLogs(logs);
+    } catch {
+      // The primary operation has already succeeded. A best-effort audit-list
+      // refresh must not make create/update/delete appear to have failed.
+    }
   }, [currentUser]);
 
   const refreshStockMovements = useCallback(async () => {

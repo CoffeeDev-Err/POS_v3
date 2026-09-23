@@ -253,7 +253,7 @@ class PosApiTest extends TestCase
             ->assertForbidden();
 
         $this->withToken($adminToken)
-            ->deleteJson("/api/expenses/{$expense['id']}")
+            ->postJson("/api/expenses/{$expense['id']}/delete")
             ->assertNoContent();
 
         $this->withToken($adminToken)
@@ -753,5 +753,61 @@ class PosApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1)
             ->assertJsonPath('0.id', $transaction['id']);
+    }
+
+    public function test_packaged_variant_uses_conversion_rate_for_stock_and_sales_total(): void
+    {
+        $token = $this->bearerToken();
+
+        $product = $this->withToken($token)
+            ->postJson('/api/products', [
+                'name' => 'Rice',
+                'category' => 'Rice',
+                'price' => 240,
+                'unit' => 'kg',
+                'baseUnit' => 'kg',
+                'stock' => 200,
+                'lowStockAlert' => 20,
+                'hasVariants' => true,
+                'variants' => [[
+                    'id' => 'rice-5kg',
+                    'name' => '5kg',
+                    'unit' => 'pack',
+                    'conversionRate' => 5,
+                    'priceRetail' => 240,
+                    'cost' => 210,
+                ]],
+            ])
+            ->assertCreated()
+            ->json();
+
+        $this->withToken($token)
+            ->postJson('/api/transactions', [
+                'paymentMethod' => 'cash',
+                'cash' => 5000,
+                'items' => [[
+                    'productId' => $product['id'],
+                    'name' => 'Rice',
+                    'variantId' => 'rice-5kg',
+                    'variantName' => '5kg',
+                    'qty' => 20,
+                    'unit' => 'pack',
+                    'sellingUnit' => 'pack',
+                    'baseUnit' => 'kg',
+                    'conversionRate' => 5,
+                    'price' => 240,
+                    'total' => 1,
+                ]],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('transaction.subtotal', 4800)
+            ->assertJsonPath('transaction.items.0.total', 4800)
+            ->assertJsonPath('transaction.items.0.qty', 20)
+            ->assertJsonPath('transaction.items.0.conversionRate', 5);
+
+        $this->withToken($token)
+            ->getJson('/api/products')
+            ->assertOk()
+            ->assertJsonPath('0.stock', 100);
     }
 }

@@ -149,6 +149,10 @@ After the secrets are added, every push to `main` will:
 
 The workflow file lives at [.github/workflows/deploy-hostinger.yml](.github/workflows/deploy-hostinger.yml).
 
+The generated Laravel app includes a `.hostinger-api-subdirectory` marker. Keep
+this file on the server: it ensures `php artisan route:cache` registers `/login`
+instead of the incorrect `/api/login` inside the already-mounted `/api` folder.
+
 ## Notes
 
 - Bluetooth printing still depends on browser/device support and HTTPS.

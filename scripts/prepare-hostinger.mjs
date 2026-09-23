@@ -57,6 +57,11 @@ async function main() {
   await copyDir(backendDir, laravelAppDir);
   await cp(path.join(backendDir, 'public'), apiPublicDir, { recursive: true, force: true });
 
+  // Laravel is mounted at /api on Hostinger. This marker is intentionally put
+  // in the generated app (not the source backend) so both web requests and
+  // `php artisan route:cache` register routes without a second /api prefix.
+  await writeFile(path.join(laravelAppDir, '.hostinger-api-subdirectory'), '');
+
   const apiIndexPath = path.join(apiPublicDir, 'index.php');
   const apiIndexContents = `<?php
 

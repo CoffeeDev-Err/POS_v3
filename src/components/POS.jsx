@@ -3,6 +3,7 @@ import '../styles/pos.css';
 import '../styles/receipt.css';
 import { printViaBluetooth, openCashDrawerViaBluetooth } from '../utils/escpos';
 import { getErrorMessage, isErrorStatusMessage, notifyError } from '../utils/errors';
+import { getLineItemDisplay, resolveSellingUnit } from '../utils/lineItems';
 
 // Known category visual config — fallback palette for custom categories
 const KNOWN_CONFIG = {
@@ -293,10 +294,16 @@ export default function POS({ products, currentUser, categories, settings, onCre
     const src = variant || product;
     const priceRetail    = Number(src.priceRetail ?? src.price ?? 0);
     const priceWholesale = Number(src.priceWholesale ?? priceRetail);
-    const unit           = variant ? variant.unit                   : product.unit;
     const conversionRate = variant ? (Number(variant.conversionRate) || 1) : (Number(product.conversionRate) || 1);
     const variantId      = variant ? variant.id   : null;
     const variantName    = variant ? variant.name : null;
+    const baseUnit       = product.baseUnit || product.unit || 'pc';
+    const unit           = resolveSellingUnit({
+      unit: variant ? variant.unit : product.unit,
+      baseUnit,
+      variantName,
+      conversionRate,
+    });
 
     // Helper: resolve tier for a given qty (auto-wholesale threshold)
     const resolveTier = (qty) => {
@@ -351,6 +358,8 @@ export default function POS({ products, currentUser, categories, settings, onCre
         priceTier: tier,
         cost:      unitCost,
         unit,
+        sellingUnit: unit,
+        baseUnit,
         conversionRate,
         qty:   1,
         total: Number(resolvedPrice),
@@ -537,7 +546,10 @@ export default function POS({ products, currentUser, categories, settings, onCre
                         )}
                       </div>
                       <div className="cart-item-price text-muted small">
-                        ₱{item.price}/{item.unit || 'pc'}
+                        ₱{item.price}/{getLineItemDisplay(item).sellingUnit}
+                        {getLineItemDisplay(item).baseTotalText && (
+                          <span className="d-block">{getLineItemDisplay(item).baseTotalText}</span>
+                        )}
                         {item.priceTier === 'wholesale' && <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.6rem' }}>W/S</span>}
                       </div>
                     </div>
@@ -608,7 +620,10 @@ export default function POS({ products, currentUser, categories, settings, onCre
                       {item.variantName && <span className="text-muted small ms-1">({item.variantName})</span>}
                     </div>
                     <div className="cart-item-price text-muted small">
-                      ₱{item.price} × {item.qty} {item.unit && <span>({item.unit})</span>}
+                      {getLineItemDisplay(item).quantityText} × ₱{item.price}
+                      {getLineItemDisplay(item).baseTotalText && (
+                        <span className="d-block">{getLineItemDisplay(item).baseTotalText}</span>
+                      )}
                       {item.priceTier === 'wholesale' && <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.6rem' }}>W/S</span>}
                     </div>
                   </div>
@@ -795,6 +810,12 @@ export default function POS({ products, currentUser, categories, settings, onCre
                 <div className="d-flex flex-column gap-2">
                   {(variantPick.product.variants || []).map(v => {
                     const convRate = Number(v.conversionRate) || 1;
+                    const sellingUnit = resolveSellingUnit({
+                      unit: v.unit,
+                      baseUnit: variantPick.product.baseUnit || variantPick.product.unit,
+                      variantName: v.name,
+                      conversionRate: convRate,
+                    });
                     const inCart = incomingCart
                       .filter(i => i.productId === variantPick.product.id)
                       .reduce((s, i) => s + i.qty * (Number(i.conversionRate) || 1), 0);
@@ -819,7 +840,7 @@ export default function POS({ products, currentUser, categories, settings, onCre
                             return priceTier === 'wholesale'
                               ? <><span className="text-warning fw-semibold">₱{wholesale.toFixed(2)}</span> <span className="text-muted">(W/S)</span></>
                               : <span>₱{retail.toFixed(2)}</span>;
-                          })()} / {v.unit}
+                          })()} / {sellingUnit}
                           {' · '}
                           {isOut ? <span className="text-danger">Out of stock</span> : <span>{sellableQty} available</span>}
                         </div>
@@ -873,8 +894,13 @@ export default function POS({ products, currentUser, categories, settings, onCre
                           <td>
                             <div className="fw-semibold">{item.name}{item.variantName ? ` (${item.variantName})` : ''}</div>
                             <div className="text-muted" style={{ fontSize: '0.68rem' }}>
-                              {item.qty} {item.unit || ''} &times; &#8369;{Number(item.price).toFixed(2)}
+                              {getLineItemDisplay(item).quantityText} &times; &#8369;{Number(item.price).toFixed(2)}
                             </div>
+                            {getLineItemDisplay(item).baseTotalText && (
+                              <div className="text-muted" style={{ fontSize: '0.64rem' }}>
+                                {getLineItemDisplay(item).baseTotalText}
+                              </div>
+                            )}
                           </td>
                           <td className="text-end fw-semibold">&#8369;{Number(item.total).toFixed(2)}</td>
                         </tr>

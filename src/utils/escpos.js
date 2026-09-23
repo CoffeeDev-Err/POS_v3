@@ -1,3 +1,6 @@
+import { getLineItemDisplay } from './lineItems';
+import { escapeHtml } from './html';
+
 const ESC = 0x1b;
 const GS = 0x1d;
 
@@ -91,17 +94,21 @@ export function buildReceiptBytes(data) {
   t(divider2);
 
   // Column headers
-  t(pad('Item', 18) + pad('Qty', 6) + pad('Amt', 8, true) + '\n');
+  t(pad('Item', 16) + pad('Qty', 8) + pad('Amt', 8, true) + '\n');
   t(divider2);
 
   // Items
   data.items.forEach(item => {
     const label = item.variantName ? `${item.name} (${item.variantName})` : item.name;
-    const name  = label.length > 18 ? label.substring(0, 18) : label;
-    const qty   = `${item.qty}${item.unit ? ' ' + item.unit : ''}`;  
+    const name  = label.length > 16 ? label.substring(0, 16) : label;
+    const itemDisplay = getLineItemDisplay(item);
+    const qty   = itemDisplay.quantityText;
     const amt   = `P${Number(item.total).toFixed(2)}`;
-    t(pad(name, 18) + pad(qty, 6) + pad(amt, 8, true) + '\n');
+    t(pad(name, 16) + pad(qty, 8) + pad(amt, 8, true) + '\n');
     t(`  @ P${Number(item.price).toFixed(2)} each\n`);
+    if (itemDisplay.baseTotalText) {
+      wrapText(`  ${itemDisplay.baseTotalText}`, RECEIPT_COLS).forEach(line => t(line + '\n'));
+    }
   });
 
   t(divider);
@@ -230,7 +237,7 @@ export function printA4Report(htmlContent, title = 'POS Report') {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>${title}</title>
+      <title>${escapeHtml(title)}</title>
       <style>
         body { font-family: Arial, sans-serif; font-size: 12pt; margin: 20mm; }
         h1 { font-size: 16pt; margin-bottom: 4px; }

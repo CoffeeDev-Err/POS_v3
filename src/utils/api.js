@@ -136,7 +136,7 @@ export const createExpense = (payload) => request('/expenses', { method: 'POST',
 export const updateExpense = (id, payload) =>
   request(`/expenses/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload });
 export const deleteExpense = (id) =>
-  request(`/expenses/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  request(`/expenses/${encodeURIComponent(id)}/delete`, { method: 'POST' });
 
 // ---- audit logs ----
 export const fetchAuditLogs = () => request('/audit-logs');

@@ -6,10 +6,17 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
-// Preserve an intentionally blank API prefix for one-domain deployments like Hostinger.
-$apiPrefix = array_key_exists('API_ROUTE_PREFIX', $_ENV)
-    ? $_ENV['API_ROUTE_PREFIX']
-    : (array_key_exists('API_ROUTE_PREFIX', $_SERVER) ? $_SERVER['API_ROUTE_PREFIX'] : 'api');
+// The Hostinger bundle is served by public_html/api/index.php. Its web server
+// removes that directory from PATH_INFO, so Laravel must register `/login`
+// rather than `/api/login`. A marker keeps HTTP requests and `route:cache`
+// consistent; relying only on .env here is unsafe because this file runs before
+// Laravel loads .env during CLI commands.
+$hostedFromApiSubdirectory = is_file(dirname(__DIR__).'/.hostinger-api-subdirectory');
+$apiPrefix = $hostedFromApiSubdirectory
+    ? ''
+    : (array_key_exists('API_ROUTE_PREFIX', $_ENV)
+        ? $_ENV['API_ROUTE_PREFIX']
+        : (array_key_exists('API_ROUTE_PREFIX', $_SERVER) ? $_SERVER['API_ROUTE_PREFIX'] : 'api'));
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -25,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Keep custom middleware aliases here so route files stay small and readable.
         $middleware->alias([
             'pos.auth' => \App\Http\Middleware\AuthenticateApiToken::class,
+            'pos.role' => \App\Http\Middleware\RequireApiRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

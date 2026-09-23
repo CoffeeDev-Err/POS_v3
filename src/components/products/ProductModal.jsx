@@ -301,7 +301,7 @@ export default function ProductModal({
                       </div>
                     )}
                     <div className="text-muted small mt-1">
-                      Example: 1 tray = 30 pcs → Name "Tray", unit=tray, pcs/unit=30
+                      Example: 5 kg rice pack → Name "5kg", selling unit=pack, kg/unit=5
                     </div>
                   </div>
                 </>

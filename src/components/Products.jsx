@@ -7,6 +7,7 @@ import {
   DeleteConfirmModal,
 } from './products/index';
 import { getErrorMessage } from '../utils/errors';
+import { resolveSellingUnit } from '../utils/lineItems';
 
 function formatMoney(value) {
   return `PHP ${Number(value || 0).toLocaleString('en-PH', {
@@ -187,7 +188,12 @@ export default function Products({
         variants: form.variants.map(v => ({
           id:                   v.id,
           name:                 v.name,
-          unit:                 v.unit,
+          unit:                 resolveSellingUnit({
+            unit: v.unit,
+            baseUnit: form.baseUnit,
+            variantName: v.name,
+            conversionRate: v.conversionRate,
+          }),
           conversionRate:       Number(v.conversionRate) || 1,
           price:                parseFloat(v.priceRetail ?? v.price) || 0,
           priceRetail:          parseFloat(v.priceRetail ?? v.price) || 0,

@@ -22,11 +22,13 @@ Route::middleware('pos.auth')->group(function () {
     Route::delete('/categories/{name}', [PosApiController::class, 'deleteCategory'])->where('name', '.*');
 
     // User administration.
-    Route::get('/users', [PosApiController::class, 'users']);
-    Route::post('/users', [PosApiController::class, 'createUser']);
-    Route::match(['put', 'patch'], '/users/{id}', [PosApiController::class, 'updateUser']);
-    Route::patch('/users/{id}/status', [PosApiController::class, 'updateUserStatus']);
-    Route::delete('/users/{id}', [PosApiController::class, 'deleteUser']);
+    Route::middleware('pos.role:superadmin')->group(function () {
+        Route::get('/users', [PosApiController::class, 'users']);
+        Route::post('/users', [PosApiController::class, 'createUser']);
+        Route::match(['put', 'patch'], '/users/{id}', [PosApiController::class, 'updateUser']);
+        Route::patch('/users/{id}/status', [PosApiController::class, 'updateUserStatus']);
+        Route::delete('/users/{id}', [PosApiController::class, 'deleteUser']);
+    });
 
     // POS and inventory operations.
     Route::get('/transactions', [PosApiController::class, 'transactions']);
@@ -44,6 +46,8 @@ Route::middleware('pos.auth')->group(function () {
     Route::post('/expenses', [PosApiController::class, 'createExpense']);
     Route::match(['put', 'patch'], '/expenses/{id}', [PosApiController::class, 'updateExpense']);
     Route::delete('/expenses/{id}', [PosApiController::class, 'deleteExpense']);
+    // Some shared-hosting security layers reject DELETE before PHP receives it.
+    Route::post('/expenses/{id}/delete', [PosApiController::class, 'deleteExpense']);
 
     Route::get('/audit-logs', [PosApiController::class, 'auditLogs']);
     Route::post('/audit-logs', [PosApiController::class, 'addAuditLog']);

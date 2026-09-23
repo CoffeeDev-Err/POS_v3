@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { printViaBluetooth } from '../utils/escpos';
 import { getErrorMessage, isErrorStatusMessage, notifyError } from '../utils/errors';
+import { getLineItemDisplay } from '../utils/lineItems';
 
 const TYPE_LABELS = {
   cash: 'Cash',
@@ -347,8 +348,13 @@ export default function Transactions({ transactions, orders, settings, onVoidTra
                               {item.name}{item.variantName ? ` (${item.variantName})` : ''}
                             </div>
                             <div className="text-muted" style={{ fontSize: '0.68rem' }}>
-                              {item.qty} {item.unit || 'pc'} × ₱{Number(item.price).toFixed(2)}
+                              {getLineItemDisplay(item).quantityText} × ₱{Number(item.price).toFixed(2)}
                             </div>
+                            {getLineItemDisplay(item).baseTotalText && (
+                              <div className="text-muted" style={{ fontSize: '0.64rem' }}>
+                                {getLineItemDisplay(item).baseTotalText}
+                              </div>
+                            )}
                           </td>
                           <td className="text-end fw-semibold">
                             ₱{Number(item.total).toFixed(2)}

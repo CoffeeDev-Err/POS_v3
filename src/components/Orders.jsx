@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { openCashDrawerViaBluetooth, printViaBluetooth } from '../utils/escpos';
 import { getErrorMessage, isErrorStatusMessage, notifyError } from '../utils/errors';
+import { getLineItemDisplay, resolveSellingUnit } from '../utils/lineItems';
 import '../styles/receipt.css';
 
 function normalizeMoney(value) {
@@ -45,7 +46,7 @@ function OrderCard({ order }) {
       <div className="border-top pt-2 mt-1">
         {(order.items || []).map((item, i) => (
           <div key={i} className="d-flex justify-content-between small text-muted">
-            <span>{item.qty}× {item.name}{item.variantName ? ` (${item.variantName})` : ''}</span>
+            <span>{getLineItemDisplay(item).quantityText} × {item.name}{item.variantName ? ` (${item.variantName})` : ''}</span>
             <span>₱{item.total}</span>
           </div>
         ))}
@@ -300,14 +301,24 @@ export default function Orders({
       };
       const auto = resolveAutoPricing(product, seeded, qtyToAdd);
       const resolvedPrice = normalizeMoney(auto?.price ?? 0);
+      const conversionRate = Number(variant?.conversionRate ?? product.conversionRate ?? 1) || 1;
+      const baseUnit = product.baseUnit || product.unit || 'pc';
+      const sellingUnit = resolveSellingUnit({
+        unit: variant?.unit || product.unit,
+        baseUnit,
+        variantName: variant?.name,
+        conversionRate,
+      });
 
       return [...prev, {
         productId: product.id,
         name: product.name,
         variantId: variant?.id || null,
         variantName: variant?.name || null,
-        unit: variant?.unit || product.unit || product.baseUnit || 'pc',
-        conversionRate: Number(variant?.conversionRate ?? product.conversionRate ?? 1) || 1,
+        unit: sellingUnit,
+        sellingUnit,
+        baseUnit,
+        conversionRate,
         qty: qtyToAdd,
         priceTier: auto?.tier || 'retail',
         price: resolvedPrice,
@@ -654,9 +665,11 @@ export default function Orders({
                         <tr key={`${item.productId || item.name}-${item.variantId || 'base'}-${idx}`}>
                           <td>
                             <div className="fw-semibold">{item.name}{item.variantName ? ` (${item.variantName})` : ''}</div>
-                            <div className="small text-muted">{item.unit || 'pc'}</div>
+                            {getLineItemDisplay(item).baseTotalText && (
+                              <div className="small text-muted">{getLineItemDisplay(item).baseTotalText}</div>
+                            )}
                           </td>
-                          <td className="text-end">{item.qty}</td>
+                          <td className="text-end">{getLineItemDisplay(item).quantityText}</td>
                           <td className="text-end">
                             ₱{Number(item.price || 0).toFixed(2)}
                             {item.priceTier === 'wholesale' && <span className="badge bg-warning text-dark ms-1">W/S</span>}
@@ -735,7 +748,10 @@ export default function Orders({
                           <tr key={`${item.productId || item.name}-${item.variantId || 'base'}-${idx}`}>
                             <td>
                               <div className="fw-semibold">{item.name}{item.variantName ? ` (${item.variantName})` : ''}</div>
-                              <div className="small text-muted">{item.unit || 'pc'}</div>
+                              <div className="small text-muted">{getLineItemDisplay(item).sellingUnitLabel}</div>
+                              {getLineItemDisplay(item).baseTotalText && (
+                                <div className="small text-muted">{getLineItemDisplay(item).baseTotalText}</div>
+                              )}
                             </td>
                             <td>
                               <input
@@ -1002,8 +1018,13 @@ export default function Orders({
                           <td>
                             <div className="fw-semibold">{item.name}{item.variantName ? ` (${item.variantName})` : ''}</div>
                             <div className="text-muted" style={{ fontSize: '0.68rem' }}>
-                              {item.qty} {item.unit} &times; &#8369;{Number(item.price).toFixed(2)}
+                              {getLineItemDisplay(item).quantityText} &times; &#8369;{Number(item.price).toFixed(2)}
                             </div>
+                            {getLineItemDisplay(item).baseTotalText && (
+                              <div className="text-muted" style={{ fontSize: '0.64rem' }}>
+                                {getLineItemDisplay(item).baseTotalText}
+                              </div>
+                            )}
                           </td>
                           <td className="text-end fw-semibold">&#8369;{Number(item.total).toFixed(2)}</td>
                         </tr>

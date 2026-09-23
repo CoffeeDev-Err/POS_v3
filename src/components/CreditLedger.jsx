@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getErrorMessage } from '../utils/errors';
+import { getLineItemDisplay } from '../utils/lineItems';
 
 const fmt = (n) => `₱${Number(n || 0).toFixed(2)}`;
 const todayYmd = () => {
@@ -673,7 +674,12 @@ export default function CreditLedger({
                           {item.name}
                           {item.variantName && <span className="text-muted ms-1 small">({item.variantName})</span>}
                         </td>
-                        <td className="text-center">{item.qty} {item.unit || ''}</td>
+                        <td className="text-center">
+                          <div>{getLineItemDisplay(item).quantityText}</div>
+                          {getLineItemDisplay(item).baseTotalText && (
+                            <div className="text-muted small">{getLineItemDisplay(item).baseTotalText}</div>
+                          )}
+                        </td>
                         <td className="text-end">{fmt(item.price)}</td>
                         <td className="text-end">{fmt(item.total)}</td>
                       </tr>
