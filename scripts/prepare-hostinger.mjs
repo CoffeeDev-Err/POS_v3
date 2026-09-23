@@ -102,6 +102,7 @@ Expected server layout:
 
 After upload, run in SSH:
   cd ~/domains/8shinerice.com/laravel-pos
+  rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php bootstrap/cache/events.php bootstrap/cache/routes-v7.php
   composer install --no-dev --optimize-autoloader --no-scripts
   php artisan package:discover
   mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing

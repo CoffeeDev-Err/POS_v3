@@ -81,6 +81,7 @@ jobs:
           sshpass -p "$HOSTINGER_PASSWORD" ssh -p "$HOSTINGER_PORT" "$HOSTINGER_USERNAME@$HOSTINGER_HOST" <<EOF
           set -e
           cd "$HOSTINGER_APP_PATH"
+          rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php bootstrap/cache/events.php bootstrap/cache/routes-v7.php
           composer install --no-dev --optimize-autoloader --no-scripts
           php artisan package:discover
           mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions storage/framework/testing
