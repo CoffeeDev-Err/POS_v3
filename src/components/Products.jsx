@@ -16,6 +16,10 @@ function formatMoney(value) {
   })}`;
 }
 
+function normalizeUnit(value, fallback = 'pc') {
+  return String(value || fallback).trim().toLowerCase() || fallback;
+}
+
 function formatDateTime(value) {
   if (!value) return 'Unknown time';
   const date = new Date(value);
@@ -107,6 +111,12 @@ export default function Products({
     return cat && s;
   });
 
+  const unitOptions = products.flatMap(product => [
+    product.unit,
+    product.baseUnit,
+    ...(Array.isArray(product.variants) ? product.variants.map(variant => variant.unit) : []),
+  ]);
+
   const openAdd = () => {
     setForm({ ...EMPTY, category: categories[0] || '' });
     setEditProduct(null);
@@ -172,25 +182,26 @@ export default function Products({
 
     let payload;
     if (form.hasVariants) {
+      const baseUnit = normalizeUnit(form.baseUnit);
       payload = {
         name:          form.name,
         category:      form.category,
         hasVariants:   true,
-        baseUnit:      form.baseUnit || 'pc',
+        baseUnit,
         stock:         parseInt(form.stock),
         lowStockAlert: parseInt(form.lowStockAlert) || 0,
         // store first variant's price at top level for backward-compat display
         price:         parseFloat(form.variants[0]?.priceRetail ?? form.variants[0]?.price) || 0,
         priceRetail:   parseFloat(form.variants[0]?.priceRetail ?? form.variants[0]?.price) || 0,
         cost:          parseFloat(form.variants[0]?.cost)  || 0,
-        unit:          form.baseUnit || 'pc',
+        unit:          baseUnit,
         conversionRate: 1,
         variants: form.variants.map(v => ({
           id:                   v.id,
           name:                 v.name,
           unit:                 resolveSellingUnit({
             unit: v.unit,
-            baseUnit: form.baseUnit,
+            baseUnit,
             variantName: v.name,
             conversionRate: v.conversionRate,
           }),
@@ -204,17 +215,18 @@ export default function Products({
         })),
       };
     } else {
+      const sellingUnit = normalizeUnit(form.unit);
       payload = {
         name:          form.name,
         category:      form.category,
         hasVariants:   false,
-        baseUnit:      form.unit || 'pc',
+        baseUnit:      sellingUnit,
         price:         parseFloat(form.priceRetail || form.price) || 0,
         priceRetail:   parseFloat(form.priceRetail || form.price) || 0,
         priceWholesale: form.priceWholesale ? parseFloat(form.priceWholesale) : null,
         wholesaleQtyThreshold: form.wholesaleQtyThreshold ? parseInt(form.wholesaleQtyThreshold) : 0,
         cost:          parseFloat(form.cost),
-        unit:          form.unit,
+        unit:          sellingUnit,
         conversionRate: Number(form.conversionRate) || 1,
         stock:         parseInt(form.stock),
         lowStockAlert: parseInt(form.lowStockAlert) || 0,
@@ -302,6 +314,7 @@ export default function Products({
         form={form}
         onFormChange={setForm}
         categories={categories}
+        unitOptions={unitOptions}
         newCatMode={newCatMode}
         newCatInput={newCatInput}
         onNewCatMode={setNewCatMode}

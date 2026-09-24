@@ -1,4 +1,15 @@
-const UNITS = ['pc', 'tray', 'btl', 'pack', 'kg', 'sack', 'case', 'sachet', 'liter', 'box', 'dozen', 'crate'];
+const DEFAULT_UNITS = [
+  'pc', 'tray', 'btl', 'pack', 'kg', 'g', 'sack', 'case', 'sachet',
+  'liter', 'ml', 'gallon', 'box', 'dozen', 'crate',
+];
+
+function buildUnitOptions(unitOptions = []) {
+  return [...new Set(
+    [...DEFAULT_UNITS, ...unitOptions]
+      .map(unit => String(unit || '').trim().toLowerCase())
+      .filter(Boolean)
+  )];
+}
 
 function genId() {
   return Math.random().toString(36).slice(2, 9);
@@ -10,6 +21,7 @@ export default function ProductModal({
   form,
   onFormChange,
   categories,
+  unitOptions,
   newCatMode,
   newCatInput,
   onNewCatMode,
@@ -24,6 +36,7 @@ export default function ProductModal({
 
   const isVariant = form.hasVariants;
   const variants  = Array.isArray(form.variants) ? form.variants : [];
+  const units = buildUnitOptions(unitOptions);
 
   /* ---------- variant row helpers ---------- */
   const addVariantRow = () => {
@@ -67,6 +80,10 @@ export default function ProductModal({
 
           {/* Body */}
           <div className="modal-body">
+            <datalist id="product-unit-options">
+              {units.map(unit => <option value={unit} key={unit} />)}
+            </datalist>
+
             {error && (
               <div className="alert alert-danger py-2 small">
                 <i className="bi bi-exclamation-circle me-1"></i>{error}
@@ -152,13 +169,15 @@ export default function ProductModal({
                 <>
                   <div className="col-6">
                     <label className="form-label fw-semibold">Selling Unit *</label>
-                    <select
-                      className="form-select"
+                    <input
+                      type="text"
+                      className="form-control"
+                      list="product-unit-options"
                       value={form.unit || 'pc'}
                       onChange={e => onFormChange({ ...form, unit: e.target.value })}
-                    >
-                      {UNITS.map(u => <option key={u}>{u}</option>)}
-                    </select>
+                      placeholder="Choose or type a unit"
+                    />
+                    <div className="text-muted small mt-1">Choose from the list or type a custom unit.</div>
                   </div>
 
                   {/* Conversion rate only when unit ≠ pc */}
@@ -213,13 +232,14 @@ export default function ProductModal({
                 <>
                   <div className="col-6">
                     <label className="form-label fw-semibold">Base Unit *</label>
-                    <select
-                      className="form-select"
+                    <input
+                      type="text"
+                      className="form-control"
+                      list="product-unit-options"
                       value={form.baseUnit || 'pc'}
                       onChange={e => onFormChange({ ...form, baseUnit: e.target.value })}
-                    >
-                      {UNITS.map(u => <option key={u}>{u}</option>)}
-                    </select>
+                      placeholder="Choose or type a unit"
+                    />
                     <div className="text-muted small mt-1">All stock is tracked in this unit.</div>
                   </div>
                   <div className="col-6">
@@ -270,9 +290,15 @@ export default function ProductModal({
                                   <input className="form-control form-control-sm" placeholder="e.g. Piece" value={v.name} onChange={e => updateVariant(idx, 'name', e.target.value)} />
                                 </td>
                                 <td>
-                                  <select className="form-select form-select-sm" value={v.unit} onChange={e => updateVariant(idx, 'unit', e.target.value)}>
-                                    {UNITS.map(u => <option key={u}>{u}</option>)}
-                                  </select>
+                                  <input
+                                    type="text"
+                                    className="form-control form-control-sm"
+                                    list="product-unit-options"
+                                    value={v.unit}
+                                    onChange={e => updateVariant(idx, 'unit', e.target.value)}
+                                    placeholder="Unit"
+                                    title="Choose from the list or type a custom unit"
+                                  />
                                 </td>
                                 <td>
                                   <input type="number" className="form-control form-control-sm" placeholder="1" value={v.conversionRate} onChange={e => updateVariant(idx, 'conversionRate', e.target.value)} min="1" />
