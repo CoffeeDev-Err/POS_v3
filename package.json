@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:hostinger": "npm run build && node scripts/prepare-hostinger.mjs",
     "lint": "eslint .",
+    "test:expenses": "node --test tests/expenseFilters.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
