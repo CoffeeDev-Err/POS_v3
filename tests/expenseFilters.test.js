@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  changeExpenseDateRange,
   filterExpenses,
-  isValidExpenseDateRange,
   summarizeExpenses,
 } from '../src/utils/expenseFilters.js';
 
@@ -56,7 +56,16 @@ test('a range without matching records returns zero summary values', () => {
   });
 });
 
-test('date range validation rejects a from date after the to date', () => {
-  assert.equal(isValidExpenseDateRange('2026-10-25', '2026-10-19'), false);
-  assert.equal(isValidExpenseDateRange('2026-10-19', '2026-10-25'), true);
+test('moving From past To automatically moves To to the same date', () => {
+  assert.deepEqual(
+    changeExpenseDateRange('2026-06-01', '2026-06-30', 'from', '2026-10-01'),
+    { fromDate: '2026-10-01', toDate: '2026-10-01' }
+  );
+});
+
+test('moving To before From automatically moves From to the same date', () => {
+  assert.deepEqual(
+    changeExpenseDateRange('2026-10-01', '2026-10-31', 'to', '2026-06-30'),
+    { fromDate: '2026-06-30', toDate: '2026-06-30' }
+  );
 });

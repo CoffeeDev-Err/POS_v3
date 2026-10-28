@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { toLocalDateString } from '../utils/date';
 import { getErrorMessage } from '../utils/errors';
 import {
+  changeExpenseDateRange,
   filterExpenses,
-  isValidExpenseDateRange,
   summarizeExpenses,
 } from '../utils/expenseFilters';
 import LoadingSkeleton from './LoadingSkeleton';
@@ -56,10 +56,6 @@ export default function Expenses({
   const [toDate, setToDate] = useState(today);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [draftFromDate, setDraftFromDate] = useState(monthStart);
-  const [draftToDate, setDraftToDate] = useState(today);
-  const [draftCategoryFilter, setDraftCategoryFilter] = useState('');
-  const [draftSearch, setDraftSearch] = useState('');
   const [editingExpense, setEditingExpense] = useState(null);
   const [expenseToDelete, setExpenseToDelete] = useState(null);
   const [form, setForm] = useState(initialForm(today));
@@ -79,11 +75,6 @@ export default function Expenses({
   }, [expenses, fromDate, toDate, categoryFilter, search]);
 
   const summary = useMemo(() => summarizeExpenses(filteredExpenses), [filteredExpenses]);
-  const isDateRangeValid = isValidExpenseDateRange(draftFromDate, draftToDate);
-  const hasPendingFilters = draftFromDate !== fromDate
-    || draftToDate !== toDate
-    || draftCategoryFilter !== categoryFilter
-    || draftSearch !== search;
 
   const openCreateModal = () => {
     setEditingExpense(null);
@@ -160,13 +151,10 @@ export default function Expenses({
     }
   };
 
-  const applyFilters = () => {
-    if (!isDateRangeValid) return;
-    setFromDate(draftFromDate);
-    setToDate(draftToDate);
-    setCategoryFilter(draftCategoryFilter);
-    setSearch(draftSearch.trim());
-    setDraftSearch(draftSearch.trim());
+  const updateDateRange = (field, value) => {
+    const nextRange = changeExpenseDateRange(fromDate, toDate, field, value);
+    setFromDate(nextRange.fromDate);
+    setToDate(nextRange.toDate);
   };
 
   const resetFilters = () => {
@@ -174,10 +162,6 @@ export default function Expenses({
     setToDate(today);
     setCategoryFilter('');
     setSearch('');
-    setDraftFromDate(monthStart);
-    setDraftToDate(today);
-    setDraftCategoryFilter('');
-    setDraftSearch('');
   };
 
   return (
@@ -203,9 +187,8 @@ export default function Expenses({
                 id="expense-from-date"
                 type="date"
                 className="form-control"
-                value={draftFromDate}
-                max={draftToDate || undefined}
-                onChange={event => setDraftFromDate(event.target.value)}
+                value={fromDate}
+                onChange={event => updateDateRange('from', event.target.value)}
               />
             </div>
             <div className="col-sm-6 col-xl-2">
@@ -214,18 +197,17 @@ export default function Expenses({
                 id="expense-to-date"
                 type="date"
                 className="form-control"
-                value={draftToDate}
-                min={draftFromDate || undefined}
-                onChange={event => setDraftToDate(event.target.value)}
+                value={toDate}
+                onChange={event => updateDateRange('to', event.target.value)}
               />
             </div>
-            <div className="col-sm-6 col-xl-3">
+            <div className="col-sm-6 col-xl-4">
               <label className="form-label small fw-semibold" htmlFor="expense-category-filter">Category</label>
               <select
                 id="expense-category-filter"
                 className="form-select"
-                value={draftCategoryFilter}
-                onChange={event => setDraftCategoryFilter(event.target.value)}
+                value={categoryFilter}
+                onChange={event => setCategoryFilter(event.target.value)}
               >
                 <option value="">All categories</option>
                 {categories.map(category => (
@@ -240,22 +222,13 @@ export default function Expenses({
                 <input
                   id="expense-search"
                   className="form-control"
-                  value={draftSearch}
-                  onChange={event => setDraftSearch(event.target.value)}
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
                   placeholder="Category or description"
                 />
               </div>
             </div>
-            <div className="col-xl-2 d-flex gap-2 justify-content-xl-end">
-              <button
-                type="button"
-                className="btn btn-primary flex-grow-1 text-nowrap"
-                onClick={applyFilters}
-                disabled={!isDateRangeValid || !hasPendingFilters}
-              >
-                <i className="bi bi-check2 me-1"></i>
-                Apply Filters
-              </button>
+            <div className="col-xl-1 d-flex justify-content-xl-end">
               <button
                 type="button"
                 className="btn btn-outline-secondary expense-icon-button"
@@ -267,12 +240,6 @@ export default function Expenses({
               </button>
             </div>
           </div>
-          {!isDateRangeValid && (
-            <div className="alert alert-danger py-2 mt-3 mb-0 small">
-              <i className="bi bi-exclamation-triangle me-2"></i>
-              The From date cannot be later than the To date.
-            </div>
-          )}
         </div>
       </div>
 
@@ -284,11 +251,6 @@ export default function Expenses({
               ? <>Showing <strong>{summary.count}</strong> expense {summary.count === 1 ? 'record' : 'records'} from <strong>{formatDateRange(fromDate, toDate)}</strong>.</>
               : <>No expense records found from <strong>{formatDateRange(fromDate, toDate)}</strong>.</>}
           </span>
-          {hasPendingFilters && isDateRangeValid && (
-            <span className="text-warning-emphasis fw-semibold small">
-              Date/filter changes are not applied yet.
-            </span>
-          )}
         </div>
       </div>
 

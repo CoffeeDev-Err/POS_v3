@@ -1,5 +1,19 @@
-export function isValidExpenseDateRange(fromDate, toDate) {
-  return !fromDate || !toDate || fromDate <= toDate;
+export function changeExpenseDateRange(fromDate, toDate, field, value) {
+  if (field === 'from') {
+    return {
+      fromDate: value,
+      toDate: value && toDate && value > toDate ? value : toDate,
+    };
+  }
+
+  if (field === 'to') {
+    return {
+      fromDate: value && fromDate && value < fromDate ? value : fromDate,
+      toDate: value,
+    };
+  }
+
+  return { fromDate, toDate };
 }
 
 export function filterExpenses(expenses, {
